@@ -91,21 +91,25 @@ class GitHub:
         if isinstance(workflows, dict) and workflows.get('total_count', 0) > len(workflows.get('workflows', [])):
             errors.append('workflows: pagination incomplete')
         raw['workflow_blobs'] = {}
-        if isinstance(workflows, dict):
-            for workflow in workflows.get('workflows', []):
-                try:
-                    path = workflow['path']
-                    if not path.startswith('.github/workflows/'):
-                        raise ProviderError('Unsupported dynamic workflow source')
-                    sha = raw.get('branch', {}).get('commit', {}).get('sha')
-                    if not sha:
-                        raise ProviderError('Missing workflow target revision')
-                    blob = self.api(f'{prefix}/contents/{quote(path, safe="/")}?ref={quote(sha, safe="")}')
-                    if not isinstance(blob, dict) or blob.get('type') != 'file' or not blob.get('sha'):
-                        raise ProviderError('Workflow contents not observable')
-                    raw['workflow_blobs'][path] = blob['sha']
-                except (ProviderError, KeyError, ValueError, TypeError) as exc:
-                    errors.append(f'workflow content: {exc}')
+        try:
+            sha = raw.get('branch', {}).get('commit', {}).get('sha')
+            if not sha:
+                raise ProviderError('Missing workflow target revision')
+            tree = self.api(f'{prefix}/git/trees/{sha}?recursive=1')
+            if not isinstance(tree.get('tree'), list) or tree.get('truncated'):
+                raise ProviderError('Canonical workflow tree incomplete')
+            for item in tree['tree']:
+                path = item['path']
+                if path.startswith('.github/workflows/') and len(path.split('/')) == 3 and path.lower().endswith(('.yml', '.yaml')):
+                    if item.get('type') != 'blob' or item.get('mode') not in ('100644', '100755'):
+                        raise ProviderError('Canonical workflow must be a regular source file')
+                    raw['workflow_blobs'][path] = item['sha']
+            # Actions registry includes unmerged candidate workflows. Only canonical
+            # source owns baseline authority; candidate registration is not policy drift.
+            raw['workflows'] = {'workflows': [{'id': w.get('id'), 'path': w['path'], 'state': w.get('state')}
+                for w in workflows.get('workflows', []) if w.get('path') in raw['workflow_blobs']]}
+        except (ProviderError, ValueError, KeyError, TypeError) as exc:
+            errors.append(f'canonical workflow tree: {exc}')
         from .native import observe_controller, observe_proof
         observe_controller(config, raw, self.api, errors)
         observation = summarize(config, raw, errors)
