@@ -3,7 +3,7 @@ import unittest
 
 from openharness.ci import WORKFLOW_PATH, controller_blobs, event_policy, workflow_text
 from openharness.model import default_config
-from openharness.native import trusted
+from openharness.native import trusted, producer_blobs
 from openharness.provider import summarize
 from tests.test_provider import substrate
 
@@ -13,8 +13,8 @@ class NativeTests(unittest.TestCase):
         self.config = default_config('owner/repo', 'main')
         self.config['verification'].update(expected_app_id=42, controller={'repository': 'owner/tool', 'revision': 'a' * 40}, sandbox_image='python@sha256:' + 'a' * 64)
         self.raw = substrate()
-        self.raw.update(controller_workflow=workflow_text(), controller_blobs=controller_blobs(), actions_policies=[event_policy()], other_target_workflows=[], canonical_config=copy.deepcopy(self.config))
-        self.raw['workflows'] = {'workflows': [{'path': WORKFLOW_PATH, 'state': 'active'}]}
+        self.raw.update(controller_workflow=workflow_text(), controller_blobs=producer_blobs(), actions_policies=[event_policy()], other_target_workflows=[], canonical_config=copy.deepcopy(self.config))
+        self.raw['workflows'] = {'workflows': [{'path': WORKFLOW_PATH, 'state': 'active'}], 'permissions': {'enabled': True, 'allowed_actions': 'all'}}
 
     def test_provenance_requires_real_native_inputs(self):
         self.assertTrue(trusted(self.config, self.raw))
@@ -29,6 +29,12 @@ class NativeTests(unittest.TestCase):
 
     def test_disabled_controller_cannot_claim_provenance(self):
         self.raw['workflows']['workflows'][0]['state'] = 'disabled_manually'
+        self.assertFalse(trusted(self.config, self.raw))
+
+    def test_repository_level_actions_disable_or_unknown_allowlist_blocks(self):
+        self.raw['workflows']['permissions']['enabled'] = False
+        self.assertFalse(trusted(self.config, self.raw))
+        self.raw['workflows']['permissions'].update(enabled=True, allowed_actions='selected')
         self.assertFalse(trusted(self.config, self.raw))
 
     def test_native_all_workflows_normalization_is_equivalent(self):
