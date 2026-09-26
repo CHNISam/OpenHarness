@@ -1,0 +1,26 @@
+{
+  "cases": {
+    "direct-update": {
+      "head": "6190e1ec357e9a3bb8f94cf3aeb0904e3ef90e50",
+      "rule_suite_id": 4239052746
+    },
+    "invalid": {
+      "head": "3681781331d49173112fbd3bc5b4d2bc25145bf3",
+      "pr": 4,
+      "rule_suite_id": 4239052127
+    },
+    "source-spoof": {
+      "blocked_run": 36231969711,
+      "head": "6adb760aba906ce25a97e6088e6f41495e1e004c",
+      "pr": 6,
+      "rule_suite_id": 4239052547
+    },
+    "valid": {
+      "head": "6190e1ec357e9a3bb8f94cf3aeb0904e3ef90e50",
+      "pr": 8
+    }
+  },
+  "policy": "53db21eb0c109d3e07f8f28269ac75874d0c914903a4549f3fb36d2e57886713",
+  "repository": "CHNISam/OpenHarness",
+  "schema": 1
+}
