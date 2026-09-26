@@ -1,3 +1,24 @@
+# v0.2 native closure and independent activation
+
+2026-09-26: The current profile has complete native deployment proof and independently
+installed tool activation. All 72 Windows tests passed without skips; trusted Linux
+Docker acceptance passed. Wheel installation has no Python runtime dependencies.
+
+Independent console entry from a neutral directory observed real GitHub data and
+entered MANAGED at 10:06:40 UTC. A fresh process reported all 16 candidates resolved:
+14 ESTABLISHED, 2 NOT APPLICABLE (trusted single-writer concurrency/fencing), zero gaps.
+The current managed documentation Change exercises worktree creation, preflight,
+continuity, native PR integration and authority release. Runtime records live in the
+Git common directory; native Issues/PRs/refs/checks remain their effective authorities.
+
+See [native evidence](native-deployment-validation.md). Current `entry`/`doctor`
+supersede every saved snapshot. Repository Actions availability, effective policy,
+immutable producer dependencies, canonical workflow and historical native job logs
+are re-observed. Missing/expired or changed evidence blocks closure.
+
+The following section is preserved as historical v0.1 evidence; its old gap/state
+statements describe that earlier candidate and are not current runtime authority.
+
 # v0.1 verification record
 
 Date: 2026-09-26. Scope: executable Genesis tooling, not full repository Harness closure.
