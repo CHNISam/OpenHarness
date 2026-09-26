@@ -24,6 +24,26 @@ and therefore intentionally refuses full activation. See the installed config an
 tool README for exact boundaries. The execution envelope trusts one local writer per
 workspace; multiple/unknown writers require a real authority/fencing adapter.
 '''
+LEGACY_ENTRY = ENTRY
+ENTRY = '''# OpenHarness entry
+
+Read `.harness/config.json`; run `openharness --repo . entry` and `doctor` to observe
+current authority, work and closure. Exit 2 means OPEN GAP, never success.
+Work authority is GitHub Issues; one Issue has multiple Changes. Use `workspace
+--issue N --change NAME` for a bound isolated worktree. Work PRs must use that branch
+and exactly one `Work-Item: #N` line. Native strict merge-only PR gates protect the
+target. Trusted baseline controllers run candidate acceptance in a credential-free
+Docker sandbox; a separate publisher binds current head/base/tree before authorizing
+integration. Native Actions event policy blocks candidate-controlled workflow sources.
+Use `integrate --pr N`, then `release`, or `handoff --reason TEXT` to preserve continuity.
+Control changes require native owner approval bound to the exact head/base, then the
+same enforced integration path. `reconcile` invalidates drift and stale projections.
+`break-glass --reason TEXT` records exceptional local recovery and grants no provider
+bypass. Doctor re-observes deployment proof, code pins, policy and applicability.
+Physical local writes are outside the declared authoritative mutation envelope.
+One trusted writer per workspace is a scope assumption; competing writers need an
+effective authority/fencing adapter. No conversational history is required.
+'''
 MARKER = '<!-- OpenHarness entry -->'
 INSTRUCTION = f'\n{MARKER}\nRead `.harness/AGENT.md` and run `openharness --repo . entry` before managed work.\n'
 WORKFLOW = '''# REVIEW TEMPLATE ONLY: candidate-controlled workflow is not trusted provenance.
@@ -43,6 +63,7 @@ jobs:
           echo 'OPEN GAP: wire an independently trusted pinned verifier before activation'
           exit 1
 '''
+LEGACY_WORKFLOW = WORKFLOW
 
 
 def json_text(value):
@@ -147,9 +168,10 @@ def bootstrap(repo, repository=None, target='main', governed_upgrade=False):
         raise ValueError('Requested repository does not match origin authority')
     config = default_config(repository, target)
     validate_config(config)
+    from .ci import workflow_text
     plans = {
         '.harness/config.json': json_text(config), '.harness/AGENT.md': ENTRY,
-        '.harness/github-workflow.yml.template': WORKFLOW,
+        '.harness/github-workflow.yml.template': workflow_text(),
     }
     agents_path = safe_path(repo.root, 'AGENTS.md')
     agents = agents_path.read_text(encoding='utf-8') if agents_path.exists() else ''
@@ -165,8 +187,10 @@ def bootstrap(repo, repository=None, target='main', governed_upgrade=False):
                     raise ValueError('Installed project identity differs; use reviewed upgrade')
                 continue
             if relative != 'AGENTS.md' and path.read_text(encoding='utf-8') != content:
-                raise ValueError(f'Installation conflict: {relative}; no files changed')
-            if relative != 'AGENTS.md':
+                legacy = {'.harness/AGENT.md': LEGACY_ENTRY, '.harness/github-workflow.yml.template': LEGACY_WORKFLOW}
+                if not governed_upgrade or path.read_text(encoding='utf-8') != legacy.get(relative):
+                    raise ValueError(f'Installation conflict: {relative}; no files changed')
+            elif relative != 'AGENTS.md':
                 continue
         changes.append((path, content))
     backups = []

@@ -11,7 +11,7 @@ from .runtime import Runtime
 
 
 def parser():
-    command = argparse.ArgumentParser(description='OpenHarness GitHub profile (v0.1: no full closure/provenance adapter)')
+    command = argparse.ArgumentParser(description='OpenHarness native GitHub profile')
     command.add_argument('--repo', default='.', help='Target repository path')
     command.add_argument('--version', action='version', version=__version__)
     commands = command.add_subparsers(dest='command', required=True)
@@ -26,8 +26,14 @@ def parser():
         ('reconcile', 'Observe authoritative state and invalidate stale local projections'),
         ('upgrade', 'Stage installer upgrade through applicable lifecycle governance'),
         ('setup-plan', 'Emit reviewable remote setup proposal without applying it'),
+        ('setup-apply', 'Install resolved native policy in Genesis without activating'),
+        ('release', 'Release an integrated binding while preserving worktree and Issue'),
     ):
         commands.add_parser(name, help=help_text)
+    integrate = commands.add_parser('integrate', help='Integrate exact bound candidate through native protected PR merge')
+    integrate.add_argument('--pr', type=int, required=True)
+    handoff = commands.add_parser('handoff', help='Record continuity in the existing isolated workspace')
+    handoff.add_argument('--reason', required=True)
     exceptional = commands.add_parser('break-glass', help='Record local exceptional recovery; grants no remote bypass')
     exceptional.add_argument('--reason', required=True)
     workspace = commands.add_parser('workspace', help='Bind an open Issue/Change to a native isolated worktree')
@@ -53,6 +59,10 @@ def main(argv=None):
             result = bootstrap(repo, args.repository, args.target)
         elif args.command == 'break-glass':
             result = runtime.break_glass(args.reason)
+        elif args.command == 'integrate':
+            result = runtime.integrate(args.pr)
+        elif args.command == 'handoff':
+            result = runtime.handoff(args.reason)
         elif args.command == 'workspace':
             result = runtime.workspace(args.issue, args.change, args.genesis)
         elif args.command == 'candidate':

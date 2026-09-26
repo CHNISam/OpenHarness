@@ -5,10 +5,8 @@ native Git workspaces, candidate-bound local verification and explicit recovery.
 Project truth stays in the target repository. GitHub remains the authority for
 Issues, PRs, canonical refs, integration rules and accepted checks.
 
-**Version 0.1 is a runnable Genesis toolchain. Full Harness activation is blocked.**
-The trusted external verifier/provenance and end-to-end deployment coverage adapters
-are still OPEN GAP. The CLI deliberately refuses activation even when provider rules
-look correct. This release does not deliver an activated Agent-ready repository.
+**Version 0.2 implements the native GitHub closure adapter.** Run `entry` and `doctor`
+for actual current lifecycle and guarantees; a saved report cannot activate a repository.
 The [frozen contract](docs/contracts/repository-agent-harness-v1.0.md) remains normative.
 
 ## Install
@@ -48,9 +46,10 @@ material input paths reject symlinks, junctions and traversal.
 
 `setup-plan` emits a proposed GitHub ruleset plus unresolved wiring steps. It never
 updates GitHub. Its unresolved App id is a placeholder; applying null would permit
-any-source checks and must not be done. The merge queue and trusted verifier require
-separate setup; the proposal is intentionally not an activation-ready API request.
-The staged CI template fails until a trusted verifier has been installed.
+any-source checks and must not be done. Configure immutable controller repository/revision
+and sandbox image pins. `setup-apply` explicitly installs resolved native policies in
+Genesis, saves exact payloads and never activates. Existing policy names require operator
+review. Commit the compiler template to `.github/workflows/openharness.yml` on the target.
 
 The project must explicitly configure acceptance commands as argument arrays:
 
@@ -99,7 +98,7 @@ live in the Git common directory, so a fresh process and sibling worktree can lo
 them. They are local operational projections, never GitHub ownership claims.
 
 Managed `workspace` and `preflight` require current activation, a valid binding and
-legal live work. These commands are intentionally blocked in v0.1. Bootstrap authority
+legal live work. Bootstrap authority
 is unavailable after exceptional/managed operation. Direct filesystem mutation is not
 restricted by a local hook and cannot be represented as a protected transition.
 
@@ -125,9 +124,22 @@ nonzero exit and timeout fail verification. Diagnostics are stored under
 trusted-local diagnostic observations; modifying them can never produce accepted
 GitHub integration proof.
 
-GitHub's real merge-group candidate must be verified through trusted provider wiring.
-A stale local diagnostic record or a candidate-editable workflow cannot satisfy that
-requirement. A sourced check alone also leaves provenance unproven.
+The native profile requires strict up-to-date checks and merge-only PRs. The trusted
+`pull_request_target` workflow loads baseline acceptance configuration and immutable
+tool source, then tests the candidate in a read-only Docker sandbox with no network,
+credentials, capabilities or host write mounts. A separate hosted publisher re-observes
+head/base/tree/work authority. An all-workflow native Actions event policy permits only
+baseline `pull_request_target`, blocking candidate push/PR/dispatch source spoofing.
+
+PRs require exactly one `Work-Item: #N` line and their Issue-bound Change branch.
+Changes to `.github/`, `.harness/` or `AGENTS.md` require a repository-owner Issue
+comment with `OpenHarness-Control-Approval: HEAD_SHA BASE_SHA`. Both old and proposed
+acceptance configurations run when config changes. Control changes use the same gate.
+
+`integrate --pr N` merges the exact clean bound candidate through native enforcement
+and confirms the integrated tree; no administrator bypass is requested. `release`
+requires recorded native integration and preserves worktree and Issue. `handoff
+--reason TEXT` preserves the binding, head and continuity note for the next single writer.
 
 ## Doctor and lifecycle
 
@@ -138,7 +150,8 @@ can shrink the catalogue or self-attest a guarantee.
 
 Doctor reads effective branch rules, ruleset details including inherited organization
 rules, bypass actors, legacy protection, target identity, workflow metadata and target
-workflow blob identities. This version requires ruleset enforcement plus a merge queue;
+workflow blob identities, immutable tool code and native Actions policy. This version
+requires ruleset enforcement plus strict merge-only integration or a native merge queue;
 legacy protection alone is reported without asserting equivalence. Rules from unrelated
 active rulesets can conservatively produce a gap if their applicability/bypass cannot
 be narrowed. Workflow content or policy changes alter the observed fingerprint. Target
@@ -146,8 +159,11 @@ commit movement alone changes candidate freshness rather than policy identity.
 
 Genesis reports contain **readiness assessments**, not established repository
 guarantees. Break-glass invalidates every advertised guarantee. Even a complete readiness
-assessment would require an explicit live Activation transition. v0.1 leaves provenance
-and enforcement coverage unresolved in every assessment.
+assessment requires an explicit live Activation transition. Record native valid,
+invalid, source-spoof and direct-update PR/head/rule-suite references in
+`.harness/deployment-proof.json`, bound to the current Doctor policy fingerprint.
+Doctor re-fetches results, historical controller/config and integrated trees;
+missing, stale or incomplete native proof blocks coverage and activation.
 
 ```sh
 openharness --repo /path/to/project activate
@@ -165,8 +181,8 @@ broken project configuration, preserves corrupt local runtime data, records its 
 and grants no GitHub bypass. Repair files explicitly, rerun verification and Doctor;
 return to Managed Operation requires complete closure and activation. Upgrade runs
 the non-destructive installer under applicable governance and invalidates affected
-activation. In v0.1 it can restage missing current-version artifacts; incompatible
-artifact migrations require a reviewed implementation delta.
+activation. Exact generated v0.1 artifacts can migrate to the current compiler;
+custom artifact conflicts are preserved and require an explicit implementation delta.
 
 ## Verification and remaining delta
 
@@ -178,14 +194,13 @@ python -m compileall -q openharness
 The suite uses real temporary Git repositories/worktrees and deterministic GitHub API
 responses. It covers invalid/valid local paths, omitted guarantees, competing writers,
 unknown applicability, source checks, bypass policy, base changes, workflow drift,
-merged-result verification, failed checks, interruption and fresh processes. CI runs
-this suite on Windows and Linux. Fixture success is separate from live deployment proof.
+merged-result verification, failed checks, interruption and fresh processes. Local
+validation covers Windows; trusted candidate CI covers Linux. Fixture success is separate
+from live deployment proof.
 
-Remaining implementation delta: trusted external verification adapter, provider-bound
-candidate proof/provenance and authoritative-path/bypass deployment tests; effective
-ownership/fencing if competing writers enter scope; provider integration/release/handoff
-commands once their enforcement can be established. No merge command is offered before
-those guarantees are proven. See [design](docs/plans/2026-09-26-github-harness-design.md),
+Current native closure requires live deployment proof, not fixture PASS. Effective
+ownership/fencing remains required if competing writers enter scope. See
+[native delta](docs/plans/2026-09-26-native-closure.md), [design](docs/plans/2026-09-26-github-harness-design.md),
 [plan](docs/plans/2026-09-26-github-harness.md) and `docs/verification.md` for current evidence.
 
 GitHub source semantics: [rules and sourced checks](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets),

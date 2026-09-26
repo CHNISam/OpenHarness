@@ -11,6 +11,13 @@ class ProviderError(ValueError):
     pass
 
 
+def gh_write(path, method, payload):
+    result = subprocess.run(['gh', 'api', path, '--method', method, '--input', '-'], input=json.dumps(payload), capture_output=True, text=True, encoding='utf-8', timeout=45)
+    if result.returncode:
+        raise ProviderError(result.stderr.strip()[:1000])
+    return json.loads(result.stdout) if result.stdout.strip() else {}
+
+
 def gh_api(path):
     try:
         result = subprocess.run(['gh', 'api', path], capture_output=True, text=True, encoding='utf-8', timeout=45)
@@ -99,7 +106,12 @@ class GitHub:
                     raw['workflow_blobs'][path] = blob['sha']
                 except (ProviderError, KeyError, ValueError, TypeError) as exc:
                     errors.append(f'workflow content: {exc}')
-        return summarize(config, raw, errors)
+        from .native import observe_controller, observe_proof
+        observe_controller(config, raw, self.api, errors)
+        observation = summarize(config, raw, errors)
+        observation['deployment_proof'] = observe_proof(config, observation, self.api)
+        observation['deployment_proven'] = observation['deployment_proof']['valid']
+        return observation
 
     def work(self, config, issue):
         if type(issue) is not int or issue <= 0:
@@ -141,6 +153,7 @@ def summarize(config, raw, errors):
     if any('bypass_actors' not in r for r in active):
         errors.append('rulesets: active bypass policy unavailable')
     sourced_check = False
+    strict = False
     verification = config['verification']
     for rule in rules:
         if rule['type'] == 'required_status_checks':
@@ -155,19 +168,28 @@ def summarize(config, raw, errors):
             for check in checks:
                 if check.get('context') == verification['required_check'] and verification['expected_app_id'] is not None and check.get('integration_id') == verification['expected_app_id']:
                     sourced_check = True
+                    strict = strict or parameters.get('strict_required_status_checks_policy') is True
     # Legacy protection can add stricter constraints; not silently ignored in drift.
     # Initial profile requires effective ruleset enforcement rather than guessing
     # equivalent semantics from incomplete legacy branch-protection responses.
-    native_gate = bool(active) and {'pull_request', 'merge_queue', 'non_fast_forward', 'deletion'} <= kinds and sourced_check and not bypass and not errors
+    merge_only = any(r.get('type') == 'pull_request' and r.get('parameters', {}).get('allowed_merge_methods') == ['merge'] for r in rules)
+    fresh_candidate = 'merge_queue' in kinds or (strict and merge_only)
+    native_gate = bool(active) and {'pull_request', 'non_fast_forward', 'deletion'} <= kinds and fresh_candidate and sourced_check and not bypass and not errors
     policy = {
         'repository': {'id': repository.get('id'), 'full_name': repository.get('full_name'), 'default_branch': repository.get('default_branch')},
         'rules': rules, 'rulesets': rulesets, 'protection': protection,
         'workflows': raw.get('workflows'), 'workflow_blobs': raw.get('workflow_blobs'),
+        'actions_policies': raw.get('actions_policies'), 'controller_blobs': raw.get('controller_blobs'),
+        'controller_workflow': raw.get('controller_workflow'), 'canonical_config': raw.get('canonical_config'),
     }
+    from .native import trusted
+    provenance = not errors and trusted(config, raw)
     return {
         'source': 'live-github-api', 'fingerprint': digest(policy) if not errors else None,
         'gate': native_gate, 'errors': errors, 'effective_rule_types': sorted(kinds),
         'bypass_actors': bypass, 'sourced_check': sourced_check,
         'target_sha': branch.get('commit', {}).get('sha'), 'policy': policy,
-        'provenance': 'UNPROVEN: App identity is not verifier implementation attestation',
+        'trusted_controller': provenance,
+        'provenance': 'Native immutable controller and event policy observed' if provenance else 'UNPROVEN: trusted controller/event policy incomplete',
+        'candidate_strategy': 'merge-queue' if 'merge_queue' in kinds else 'strict-merge-only-pr',
     }

@@ -35,6 +35,7 @@ def default_config(repository, target):
             'commands': [], 'material_inputs': [], 'environment': {},
             'required_check': 'openharness / candidate',
             'expected_app_id': None,
+            'controller': None, 'sandbox_image': None,
         },
     }
 
@@ -60,7 +61,8 @@ def validate_config(config):
         if not isinstance(envelope[field], list) or not all(isinstance(v, str) for v in envelope[field]):
             raise ValueError('Envelope actors and exclusions must be string lists')
     verification = config['verification']
-    if not isinstance(verification, dict) or set(verification) != {'commands', 'material_inputs', 'environment', 'required_check', 'expected_app_id'}:
+    fields = {'commands', 'material_inputs', 'environment', 'required_check', 'expected_app_id'}
+    if not isinstance(verification, dict) or not fields <= set(verification) or set(verification) - fields - {'controller', 'sandbox_image'}:
         raise ValueError('Invalid verification configuration')
     if not isinstance(verification['commands'], list) or not all(isinstance(c, list) and c and all(isinstance(v, str) and v for v in c) for c in verification['commands']):
         raise ValueError('Verification commands must be nonempty argv lists, never shell text')
@@ -73,6 +75,13 @@ def validate_config(config):
     app = verification['expected_app_id']
     if app is not None and (type(app) is not int or app <= 0):
         raise ValueError('Check provenance app id must be a positive integer or unresolved null')
+    controller = verification.get('controller')
+    if controller is not None:
+        if not isinstance(controller, dict) or set(controller) != {'repository', 'revision'} or not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', controller.get('repository', '')) or not re.fullmatch(r'[0-9a-f]{40}', controller.get('revision', '')):
+            raise ValueError('Controller must bind one immutable GitHub source revision')
+    image = verification.get('sandbox_image')
+    if image is not None and not re.fullmatch(r'[a-z0-9./_-]+@sha256:[0-9a-f]{64}', image):
+        raise ValueError('Sandbox image must be immutable')
     return config
 
 
@@ -110,11 +119,11 @@ def evaluate(config, local, provider):
     resolve('isolation', installed and git, 'Workspace command binds separate Git worktrees; executor must enforce declared single writer', 'workspaces created through supported command', ['git_worktrees', 'envelope'])
     resolve('candidate-freshness', installed and bool(config['verification']['commands']), 'Verifier binds explicit head/base/result/config/inputs/environment and rejects changed subjects', 'local verification evidence; remote acceptance evaluated separately', ['candidate', 'verification'])
     for name in ('integration', 'mutation'):
-        resolve(name, gate, 'Live required PR, merge queue, sourced check, non-fast-forward/deletion protection and no bypass required', 'GitHub target-ref updates', ['rulesets', 'protection', 'bypass_actors', 'required_checks'])
-    # App identity does not prove the implementation producing that check. v0.1 has
-    # no external verifier attestation adapter: refuse to manufacture such proof.
-    resolve('provenance', False, 'Expected App is necessary but insufficient: trusted verifier implementation and candidate-independent wiring not yet attested by this version', 'accepted integration evidence producer', ['workflow', 'expected_app_id', 'verifier_source'])
-    resolve('coverage', False, 'Provider rules observed; end-to-end trusted guard wiring and authoritative bypass rejection require deployment proof adapter', 'all in-scope authoritative transitions', ['rulesets', 'workflow', 'bypass_actors', 'authority'])
+        resolve(name, gate, 'Live required PR, fresh integration candidate, sourced check, non-fast-forward/deletion protection and no bypass required', 'GitHub target-ref updates', ['rulesets', 'protection', 'bypass_actors', 'required_checks'])
+    provenance = observed and provider.get('trusted_controller', False)
+    coverage = gate and provenance and provider.get('deployment_proven', False)
+    resolve('provenance', provenance, 'Immutable baseline controller, isolated sandbox, separate publisher and native all-workflow event policy must match live source', 'accepted integration evidence producer', ['workflow', 'actions_policy', 'expected_app_id', 'verifier_source'])
+    resolve('coverage', coverage, 'Current live valid/invalid/source-spoof/direct-update proof must bind provider enforcement and trusted controller', 'all in-scope authoritative transitions within trusted single-writer profile', ['rulesets', 'workflow', 'actions_policy', 'bypass_actors', 'authority', 'deployment_proof'])
     for name in ('guarantee-freshness', 'na-freshness'):
         resolve(name, installed and observed, 'Doctor re-observes current provider/configuration; saved activation digest cannot survive drift', 'observed closure and applicability', ['provider_fingerprint', 'config', 'envelope'])
     for name, reason in (
@@ -131,5 +140,5 @@ def evaluate(config, local, provider):
         'closure': all(g['status'] != 'OPEN GAP' and g['applicability_resolved'] for g in guarantees),
         'guarantees': guarantees, 'provider': provider,
         'substrate': digest({'config': config, 'local': {k: v for k, v in local.items() if k != 'clean'}, 'provider': provider.get('fingerprint')}),
-        'limitations': ['v0.1 cannot establish full closure: external verifier provenance and deployment coverage proof adapters are not implemented'],
+        'limitations': ['Closure is bounded by current native policy, immutable controller, deployment proof and declared trusted local execution envelope'],
     }

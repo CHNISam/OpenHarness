@@ -66,7 +66,7 @@ class CLITests(unittest.TestCase):
         self.assertEqual(0, plan.returncode)
         data = json.loads(plan.stdout)
         self.assertEqual('proposal-only', data['mode'])
-        self.assertFalse(data['activation_possible_in_this_version'])
+        self.assertTrue(data['activation_possible_in_this_version'])
         self.assertTrue(data['unresolved'])
 
 

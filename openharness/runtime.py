@@ -303,20 +303,110 @@ class Runtime:
     def setup_plan(self):
         config = self.repo.config()
         app = config['verification']['expected_app_id']
+        from .ci import event_policy, workflow_text, WORKFLOW_PATH
         return {
             'mode': 'proposal-only', 'repository': config['repository'], 'target': config['target'],
             'ruleset': {
                 'name': 'OpenHarness integration', 'target': 'branch', 'enforcement': 'active',
                 'conditions': {'ref_name': {'include': [f'refs/heads/{config["target"]}'], 'exclude': []}},
                 'bypass_actors': [],
-                'rules': [{'type': 'pull_request', 'parameters': {'required_approving_review_count': 1, 'dismiss_stale_reviews_on_push': True, 'require_code_owner_review': True, 'require_last_push_approval': True, 'required_review_thread_resolution': True, 'allowed_merge_methods': ['merge']}}, {'type': 'non_fast_forward'}, {'type': 'deletion'}, {'type': 'required_status_checks', 'parameters': {'strict_required_status_checks_policy': True, 'required_status_checks': [{'context': config['verification']['required_check'], 'integration_id': app}]}}],
+                'rules': [{'type': 'pull_request', 'parameters': {'required_approving_review_count': 0, 'dismiss_stale_reviews_on_push': True, 'require_code_owner_review': False, 'require_last_push_approval': False, 'required_review_thread_resolution': True, 'allowed_merge_methods': ['merge']}}, {'type': 'non_fast_forward'}, {'type': 'deletion'}, {'type': 'required_status_checks', 'parameters': {'strict_required_status_checks_policy': True, 'required_status_checks': [{'context': config['verification']['required_check'], 'integration_id': app}]}}],
             },
+            'actions_policy': event_policy(),
+            'workflow': {'path': WORKFLOW_PATH, 'contents': workflow_text()},
             'unresolved': [
                 *(['Discover and configure trusted check App id; null must never be applied as any-source acceptance'] if app is None else []),
-                'Configure provider-native merge queue and require its effective rule',
-                'Install independently trusted verifier and protect its control surfaces',
-                'Wire required check on both pull_request and merge_group; template intentionally fails until wired',
-                'Run live invalid/valid/bypass/provenance deployment proof; no proof adapter is implemented in v0.1',
+                *(['Pin immutable controller source and sandbox image'] if not config['verification'].get('controller') or not config['verification'].get('sandbox_image') else []),
+                'Apply native policy, install canonical workflow, run and record current live deployment proof',
             ],
-            'activation_possible_in_this_version': False,
+            'activation_possible_in_this_version': True,
         }
+
+    def setup_apply(self):
+        """Explicit installer command; collision-safe and never activates."""
+        from .provider import gh_write
+        with self.locked():
+            if self.state()['lifecycle'] != 'GENESIS':
+                raise ValueError('Native installer authority is available only in Genesis; managed policy upgrades require operator governance')
+            plan = self.setup_plan()
+            config = self.repo.config()
+            if config['verification']['expected_app_id'] is None or not config['verification'].get('controller') or not config['verification'].get('sandbox_image'):
+                raise ValueError('Native setup requires resolved provenance pins and App identity')
+            prefix = f'repos/{config["repository"]}'
+            applied = []
+            for endpoint, field in (('actions/policies', 'actions_policy'), ('rulesets', 'ruleset')):
+                listed = self.provider.api(f'{prefix}/{endpoint}?per_page=100')
+                items = listed.get('policies', []) if isinstance(listed, dict) else listed
+                if not isinstance(items, list) or len(items) >= 100:
+                    raise ValueError('Native policy inventory incomplete')
+                same = [item for item in items if item.get('name') == plan[field]['name']]
+                if same:
+                    raise ValueError(f'Existing policy name requires explicit operator review: {plan[field]["name"]}')
+                self.write(f'setup/{field}.json', plan[field])
+                result = gh_write(f'{prefix}/{endpoint}', 'POST', plan[field])
+                applied.append({'kind': field, 'id': result.get('id')})
+            return {'applied': applied, 'activated': False, 'next': 'Observe live enforcement and complete deployment proof before activation'}
+
+    def integrate(self, pr):
+        from .ci import candidate_context
+        from .provider import gh_write
+        with self.locked():
+            preflight = self.preflight()
+            config = self.repo.config()
+            prefix = f'repos/{config["repository"]}'
+            pull = self.provider.api(f'{prefix}/pulls/{int(pr)}')
+            issue = self.provider.api(f'{prefix}/issues/{preflight["workspace"]["work_item"]}')
+            context = candidate_context(config, pull, issue)
+            if pull['head']['ref'] != preflight['workspace']['branch'] or context['head'] != self.repo.revision('HEAD') or self.repo.git('status', '--porcelain'):
+                raise ValueError('Integration requires the exact clean bound local PR candidate')
+            base = self.provider.api(f'{prefix}/branches/{config["target"]}')['commit']['sha']
+            if context['base'] != base:
+                raise ValueError('Integration candidate base is stale')
+            self.repo.git('merge-base', '--is-ancestor', base, context['head'])
+            expected = self.repo.git('rev-parse', 'HEAD^{tree}')
+            result = gh_write(f'{prefix}/pulls/{pr}/merge', 'PUT', {'sha': context['head'], 'merge_method': 'merge'})
+            if not result.get('merged'):
+                raise ValueError('Native integration rejected: ' + str(result.get('message')))
+            integrated = self.provider.api(f'{prefix}/git/commits/{result["sha"]}')
+            if integrated['tree']['sha'] != expected:
+                self.break_glass_after_integration(result['sha'])
+                raise ValueError('Native integrated tree differs from tested candidate; managed authority invalidated')
+            state = self.state()
+            state['workspaces'][str(self.repo.root)]['integrated'] = {'pr': pr, 'head': context['head'], 'commit': result['sha'], 'tree': expected}
+            state['events'].append({'time': now(), 'transition': 'INTEGRATE', **state['workspaces'][str(self.repo.root)]['integrated']})
+            self.save_state(state)
+            return result
+
+    def break_glass_after_integration(self, sha):
+        state = self.state()
+        state.update(lifecycle='UNPROVEN', substrate=None)
+        state['events'].append({'time': now(), 'transition': 'INVALIDATE', 'reason': 'Integration tree mismatch', 'commit': sha})
+        self.save_state(state)
+
+    def release(self):
+        with self.locked():
+            state = self.state()
+            binding = state.get('workspaces', {}).get(str(self.repo.root))
+            if not binding or not binding.get('integrated'):
+                raise ValueError('Release requires a recorded native integration; use handoff for unfinished work')
+            config = self.repo.config()
+            pull = self.provider.api(f'repos/{config["repository"]}/pulls/{binding["integrated"]["pr"]}')
+            if not pull.get('merged') or pull.get('merge_commit_sha') != binding['integrated']['commit']:
+                raise ValueError('Native integration record no longer matches release subject')
+            del state['workspaces'][str(self.repo.root)]
+            state['events'].append({'time': now(), 'transition': 'RELEASE', 'binding': binding})
+            self.save_state(state)
+            return {'released': binding, 'worktree_preserved': True, 'issue_closed': False}
+
+    def handoff(self, reason):
+        if not reason.strip():
+            raise ValueError('Handoff requires a continuity note')
+        with self.locked():
+            state = self.state()
+            binding = state.get('workspaces', {}).get(str(self.repo.root))
+            if not binding:
+                raise ValueError('Handoff requires a bound workspace')
+            record = {'time': now(), 'transition': 'HANDOFF', 'binding': binding, 'head': self.repo.revision('HEAD'), 'dirty': bool(self.repo.git('status', '--porcelain')), 'reason': reason}
+            state['events'].append(record)
+            self.save_state(state)
+            return {**record, 'worktree_preserved': True, 'next': 'Successor reads entry/reconcile and resumes this same binding; single-writer envelope remains required'}

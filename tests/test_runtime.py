@@ -40,6 +40,17 @@ class RuntimeTests(unittest.TestCase):
         self.provider.sha = self.repo.revision('main')
         self.runtime = Runtime(self.repo, self.provider)
 
+    def test_release_refuses_unintegrated_work_and_handoff_preserves_binding(self):
+        binding = self.repo.workspace(1, 'fix', self.repo.revision('HEAD'))
+        work = Runtime(Repository(binding['path']), self.provider)
+        work.save_state({'lifecycle': 'GENESIS', 'events': [], 'workspaces': {binding['path']: binding}})
+        with self.assertRaises(ValueError):
+            work.release()
+        record = work.handoff('Tests complete; native PR still needs integration')
+        self.assertTrue(record['worktree_preserved'])
+        self.assertEqual(binding, work.state()['workspaces'][binding['path']])
+        self.assertEqual('HANDOFF', work.state()['events'][-1]['transition'])
+
     def test_activation_refuses_fixture_pass_without_provenance(self):
         with self.assertRaises(ValueError):
             self.runtime.activate()
