@@ -106,7 +106,7 @@ class Repository:
 
     def local(self):
         paths = ('.harness/config.json', '.harness/AGENT.md', 'AGENTS.md')
-        controls = {p: hashlib.sha256(safe_path(self.root, p).read_bytes()).hexdigest() if safe_path(self.root, p).is_file() else None for p in paths}
+        controls = {p: hashlib.sha256(safe_path(self.root, p).read_bytes().replace(b'\r\n', b'\n')).hexdigest() if safe_path(self.root, p).is_file() else None for p in paths}
         entry = safe_path(self.root, '.harness/AGENT.md')
         agents = safe_path(self.root, 'AGENTS.md')
         installed = all(controls.values()) and entry.read_text(encoding='utf-8') == ENTRY and MARKER in agents.read_text(encoding='utf-8')
