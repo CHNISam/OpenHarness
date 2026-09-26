@@ -1,0 +1,68 @@
+name: Agent feedback
+description: Report friction, missing capability, confusing behavior, or a reusable improvement observed during real OpenHarness use.
+title: "[agent-feedback] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Report what was actually observed. Feedback can come from any agent, runtime, or human operator.
+        Do not weaken a guarantee merely to make one task easier; distinguish usability friction from an execution/trust-envelope change.
+
+  - type: textarea
+    id: observation
+    attributes:
+      label: Observed friction
+      description: What was difficult, confusing, missing, unnecessarily costly, or incorrect?
+      placeholder: Describe the smallest concrete observation.
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Execution context
+      description: Repository/profile, command or workflow, agent/runtime, and relevant trust/execution-envelope facts.
+      placeholder: Include only context that can affect interpretation.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_actual
+    attributes:
+      label: Expected vs. actual
+      description: What should have happened, and what happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Logs, command output, PR/run/commit references, reproducible steps, or other inspectable proof.
+      placeholder: Prefer durable references over narrative when available.
+    validations:
+      required: true
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Why this matters
+      description: What recurring work, decision, proof, or Agent behavior does this affect?
+    validations:
+      required: true
+
+  - type: textarea
+    id: direction
+    attributes:
+      label: Proposed direction (optional)
+      description: Suggest a fix only if the problem is understood. Prefer native provider/runtime capabilities and the smallest OpenHarness delta.
+
+  - type: checkboxes
+    id: guardrails
+    attributes:
+      label: Guardrail check
+      options:
+        - label: I have not treated a saved report, local workaround, or convenience bypass as proof of live enforcement.
+          required: true
+        - label: If this proposal changes a Guarantee or Trust/Execution Envelope, I have stated that explicitly.
+          required: true
