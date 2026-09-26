@@ -1,0 +1,684 @@
+{
+  "candidate_count": 16,
+  "closure": false,
+  "envelope": {
+    "excluded_transitions": [
+      "arbitrary-local-writes",
+      "administrator-policy-reconfiguration"
+    ],
+    "trusted_actors": [
+      "repository-admins",
+      "ci-maintainers",
+      "local-executor"
+    ],
+    "workspace_writers": "single"
+  },
+  "guarantees": [
+    {
+      "applicability_resolved": true,
+      "authority": "fixed profile / live Git and GitHub",
+      "id": "applicability",
+      "invalidation_triggers": [
+        "profile",
+        "envelope"
+      ],
+      "proof": null,
+      "reason": "GENESIS: no current activation / proof invalidated. Readiness: Fixed profile evaluates all 16 candidates; unknown applicability blocks closure",
+      "scope": "catalogue completeness",
+      "status": "OPEN GAP",
+      "validity_conditions": "Only current observed substrate inside declared envelope"
+    },
+    {
+      "applicability_resolved": true,
+      "authority": "fixed profile / live Git and GitHub",
+      "id": "authority",
+      "invalidation_triggers": [
+        "authorities",
+        "provider_identity",
+        "origin"
+      ],
+      "proof": null,
+      "reason": "GENESIS: no current activation / proof invalidated. Readiness: Exact semantic authority map plus live repository and origin identity required",
+      "scope": "declared semantic mapping; privileged policy operators trusted",
+      "status": "OPEN GAP",
+      "validity_conditions": "Only current observed substrate inside declared envelope"
+    },
+    {
+      "applicability_resolved": true,
+      "authority": "fixed profile / live Git and GitHub",
+      "id": "coverage",
+      "invalidation_triggers": [
+        "rulesets",
+        "workflow",
+        "bypass_actors",
+        "authority"
+      ],
+      "proof": null,
+      "reason": "Provider rules observed; end-to-end trusted guard wiring and authoritative bypass rejection require deployment proof adapter",
+      "scope": "all in-scope authoritative transitions",
+      "status": "OPEN GAP",
+      "validity_conditions": "Only current observed substrate inside declared envelope"
+    },
+    {
+      "applicability_resolved": true,
+      "authority": "fixed profile / live Git and GitHub",
+      "id": "concurrency",
+      "invalidation_triggers": [
+        "workspace_writers",
+        "trusted_actors"
+      ],
+      "proof": null,
+      "reason": "Trusted single writer per workspace; conflicting integration delegated to provider",
+      "scope": "local workspace writers; target integration evaluated separately",
+      "status": "NOT APPLICABLE",
+      "validity_conditions": "Only current observed substrate inside declared envelope"
+    },
+    {
+      "applicability_resolved": true,
+      "authority": "fixed profile / live Git and GitHub",
+      "id": "fencing",
+      "invalidation_triggers": [
+        "workspace_writers",
+        "trusted_actors"
+      ],
+      "proof": null,
+      "reason": "Trusted single writer per workspace; conflicting integration delegated to provider",
+      "scope": "local workspace writers; target integration evaluated separately",
+      "status": "NOT APPLICABLE",
+      "validity_conditions": "Only current observed substrate inside declared envelope"
+    },
+    {
+      "applicability_resolved": true,
+      "authority": "fixed profile / live Git and GitHub",
+      "id": "isolation",
+      "invalidation_triggers": [
+        "git_worktrees",
+        "envelope"
+      ],
+      "proof": null,
+      "reason": "GENESIS: no current activation / proof invalidated. Readiness: Workspace command binds separate Git worktrees; executor must enforce declared single writer",
+      "scope": "workspaces created through supported command",
+      "status": "OPEN GAP",
+      "validity_conditions": "Only current observed substrate inside declared envelope"
+    },
+    {
+      "applicability_resolved": true,
+      "authority": "fixed profile / live Git and GitHub",
+      "id": "mutation",
+      "invalidation_triggers": [
+        "rulesets",
+        "protection",
+        "bypass_actors",
+        "required_checks"
+      ],
+      "proof": null,
+      "reason": "Live required PR, merge queue, sourced check, non-fast-forward/deletion protection and no bypass required",
+      "scope": "GitHub target-ref updates",
+      "status": "OPEN GAP",
+      "validity_conditions": "Only current observed substrate inside declared envelope"
+    },
+    {
+      "applicability_resolved": true,
+      "authority": "fixed profile / live Git and GitHub",
+      "id": "candidate-freshness",
+      "invalidation_triggers": [
+        "candidate",
+        "verification"
+      ],
+      "proof": null,
+      "reason": "GENESIS: no current activation / proof invalidated. Readiness: Verifier binds explicit head/base/result/config/inputs/environment and rejects changed subjects",
+      "scope": "local verification evidence; remote acceptance evaluated separately",
+      "status": "OPEN GAP",
+      "validity_conditions": "Only current observed substrate inside declared envelope"
+    },
+    {
+      "applicability_resolved": true,
+      "authority": "fixed profile / live Git and GitHub",
+      "id": "provenance",
+      "invalidation_triggers": [
+        "workflow",
+        "expected_app_id",
+        "verifier_source"
+      ],
+      "proof": null,
+      "reason": "Expected App is necessary but insufficient: trusted verifier implementation and candidate-independent wiring not yet attested by this version",
+      "scope": "accepted integration evidence producer",
+      "status": "OPEN GAP",
+      "validity_conditions": "Only current observed substrate inside declared envelope"
+    },
+    {
+      "applicability_resolved": true,
+      "authority": "fixed profile / live Git and GitHub",
+      "id": "integration",
+      "invalidation_triggers": [
+        "rulesets",
+        "protection",
+        "bypass_actors",
+        "required_checks"
+      ],
+      "proof": null,
+      "reason": "Live required PR, merge queue, sourced check, non-fast-forward/deletion protection and no bypass required",
+      "scope": "GitHub target-ref updates",
+      "status": "OPEN GAP",
+      "validity_conditions": "Only current observed substrate inside declared envelope"
+    },
+    {
+      "applicability_resolved": true,
+      "authority": "fixed profile / live Git and GitHub",
+      "id": "guarantee-freshness",
+      "invalidation_triggers": [
+        "provider_fingerprint",
+        "config",
+        "envelope"
+      ],
+      "proof": null,
+      "reason": "GENESIS: no current activation / proof invalidated. Readiness: Doctor re-observes current provider/configuration; saved activation digest cannot survive drift",
+      "scope": "observed closure and applicability",
+      "status": "OPEN GAP",
+      "validity_conditions": "Only current observed substrate inside declared envelope"
+    },
+    {
+      "applicability_resolved": true,
+      "authority": "fixed profile / live Git and GitHub",
+      "id": "na-freshness",
+      "invalidation_triggers": [
+        "provider_fingerprint",
+        "config",
+        "envelope"
+      ],
+      "proof": null,
+      "reason": "GENESIS: no current activation / proof invalidated. Readiness: Doctor re-observes current provider/configuration; saved activation digest cannot survive drift",
+      "scope": "observed closure and applicability",
+      "status": "OPEN GAP",
+      "validity_conditions": "Only current observed substrate inside declared envelope"
+    },
+    {
+      "applicability_resolved": true,
+      "authority": "fixed profile / live Git and GitHub",
+      "id": "recovery",
+      "invalidation_triggers": [
+        "installation",
+        "config",
+        "runtime"
+      ],
+      "proof": null,
+      "reason": "GENESIS: no current activation / proof invalidated. Readiness: Reconcile re-observes provider and invalidates stale local projections without conversational memory",
+      "scope": "supported local lifecycle commands; remote enforcement separately evaluated",
+      "status": "OPEN GAP",
+      "validity_conditions": "Only current observed substrate inside declared envelope"
+    },
+    {
+      "applicability_resolved": true,
+      "authority": "fixed profile / live Git and GitHub",
+      "id": "break-glass",
+      "invalidation_triggers": [
+        "installation",
+        "config",
+        "runtime"
+      ],
+      "proof": null,
+      "reason": "GENESIS: no current activation / proof invalidated. Readiness: Explicit local exceptional lifecycle record invalidates managed authority; does not grant GitHub bypass permissions",
+      "scope": "supported local lifecycle commands; remote enforcement separately evaluated",
+      "status": "OPEN GAP",
+      "validity_conditions": "Only current observed substrate inside declared envelope"
+    },
+    {
+      "applicability_resolved": true,
+      "authority": "fixed profile / live Git and GitHub",
+      "id": "closure",
+      "invalidation_triggers": [
+        "installation",
+        "config",
+        "runtime"
+      ],
+      "proof": null,
+      "reason": "GENESIS: no current activation / proof invalidated. Readiness: Entry locates config, lifecycle and fresh complete Doctor report; saved reports are projections",
+      "scope": "supported local lifecycle commands; remote enforcement separately evaluated",
+      "status": "OPEN GAP",
+      "validity_conditions": "Only current observed substrate inside declared envelope"
+    },
+    {
+      "applicability_resolved": true,
+      "authority": "fixed profile / live Git and GitHub",
+      "id": "fresh-agent",
+      "invalidation_triggers": [
+        "installation",
+        "config",
+        "runtime"
+      ],
+      "proof": null,
+      "reason": "GENESIS: no current activation / proof invalidated. Readiness: Installed entry and CLI expose authority, Issue/PR discovery, workspace binding and recovery",
+      "scope": "supported local lifecycle commands; remote enforcement separately evaluated",
+      "status": "OPEN GAP",
+      "validity_conditions": "Only current observed substrate inside declared envelope"
+    }
+  ],
+  "lifecycle": "GENESIS",
+  "limitations": [
+    "v0.1 cannot establish full closure: external verifier provenance and deployment coverage proof adapters are not implemented"
+  ],
+  "observed_at": "2026-09-26T08:10:44.759427+00:00",
+  "profile": "github-pr-v1",
+  "provider": {
+    "bypass_actors": [],
+    "effective_rule_types": [],
+    "errors": [],
+    "fingerprint": "f3821cb462167fa2bc808e399782d02ed8263713327162da31065127ce5d7cf0",
+    "gate": false,
+    "policy": {
+      "protection": null,
+      "repository": {
+        "default_branch": "main",
+        "full_name": "CHNISam/OpenHarness",
+        "id": 1388781984
+      },
+      "rules": [],
+      "rulesets": [],
+      "workflow_blobs": {},
+      "workflows": {
+        "total_count": 0,
+        "workflows": []
+      }
+    },
+    "provenance": "UNPROVEN: App identity is not verifier implementation attestation",
+    "source": "live-github-api",
+    "sourced_check": false,
+    "target_sha": "3e7f02532f19549a210e2bc4f65a75718a0ab577"
+  },
+  "readiness": {
+    "authority": "assessment-only; not activation",
+    "closure": false,
+    "guarantees": [
+      {
+        "applicability_resolved": true,
+        "authority": "fixed profile / live Git and GitHub",
+        "id": "applicability",
+        "invalidation_triggers": [
+          "profile",
+          "envelope"
+        ],
+        "proof": {
+          "local": {
+            "authority_matches_origin": true,
+            "clean": false,
+            "controls": "30f7c6f36f080a03777802fef53394370835f8e991fd21e46cc93ffae70ad6e1",
+            "git": true,
+            "installed": true,
+            "verifier": {
+              "code": "3238f6f92ac6e9cc9918130351c64693a92905d3ab8b6a4775dd55a6f33b8ddd",
+              "platform": "Windows-11-10.0.26200-SP0",
+              "python": "3.13.12 (tags/v3.13.12:1cbe481, Feb  3 2026, 18:22:25) [MSC v.1944 64 bit (AMD64)]",
+              "tool": "0.1.0"
+            }
+          },
+          "provider_observation": "f3821cb462167fa2bc808e399782d02ed8263713327162da31065127ce5d7cf0"
+        },
+        "reason": "Fixed profile evaluates all 16 candidates; unknown applicability blocks closure",
+        "scope": "catalogue completeness",
+        "status": "ESTABLISHED",
+        "validity_conditions": "Only current observed substrate inside declared envelope"
+      },
+      {
+        "applicability_resolved": true,
+        "authority": "fixed profile / live Git and GitHub",
+        "id": "authority",
+        "invalidation_triggers": [
+          "authorities",
+          "provider_identity",
+          "origin"
+        ],
+        "proof": {
+          "local": {
+            "authority_matches_origin": true,
+            "clean": false,
+            "controls": "30f7c6f36f080a03777802fef53394370835f8e991fd21e46cc93ffae70ad6e1",
+            "git": true,
+            "installed": true,
+            "verifier": {
+              "code": "3238f6f92ac6e9cc9918130351c64693a92905d3ab8b6a4775dd55a6f33b8ddd",
+              "platform": "Windows-11-10.0.26200-SP0",
+              "python": "3.13.12 (tags/v3.13.12:1cbe481, Feb  3 2026, 18:22:25) [MSC v.1944 64 bit (AMD64)]",
+              "tool": "0.1.0"
+            }
+          },
+          "provider_observation": "f3821cb462167fa2bc808e399782d02ed8263713327162da31065127ce5d7cf0"
+        },
+        "reason": "Exact semantic authority map plus live repository and origin identity required",
+        "scope": "declared semantic mapping; privileged policy operators trusted",
+        "status": "ESTABLISHED",
+        "validity_conditions": "Only current observed substrate inside declared envelope"
+      },
+      {
+        "applicability_resolved": true,
+        "authority": "fixed profile / live Git and GitHub",
+        "id": "coverage",
+        "invalidation_triggers": [
+          "rulesets",
+          "workflow",
+          "bypass_actors",
+          "authority"
+        ],
+        "proof": null,
+        "reason": "Provider rules observed; end-to-end trusted guard wiring and authoritative bypass rejection require deployment proof adapter",
+        "scope": "all in-scope authoritative transitions",
+        "status": "OPEN GAP",
+        "validity_conditions": "Only current observed substrate inside declared envelope"
+      },
+      {
+        "applicability_resolved": true,
+        "authority": "fixed profile / live Git and GitHub",
+        "id": "concurrency",
+        "invalidation_triggers": [
+          "workspace_writers",
+          "trusted_actors"
+        ],
+        "proof": null,
+        "reason": "Trusted single writer per workspace; conflicting integration delegated to provider",
+        "scope": "local workspace writers; target integration evaluated separately",
+        "status": "NOT APPLICABLE",
+        "validity_conditions": "Only current observed substrate inside declared envelope"
+      },
+      {
+        "applicability_resolved": true,
+        "authority": "fixed profile / live Git and GitHub",
+        "id": "fencing",
+        "invalidation_triggers": [
+          "workspace_writers",
+          "trusted_actors"
+        ],
+        "proof": null,
+        "reason": "Trusted single writer per workspace; conflicting integration delegated to provider",
+        "scope": "local workspace writers; target integration evaluated separately",
+        "status": "NOT APPLICABLE",
+        "validity_conditions": "Only current observed substrate inside declared envelope"
+      },
+      {
+        "applicability_resolved": true,
+        "authority": "fixed profile / live Git and GitHub",
+        "id": "isolation",
+        "invalidation_triggers": [
+          "git_worktrees",
+          "envelope"
+        ],
+        "proof": {
+          "local": {
+            "authority_matches_origin": true,
+            "clean": false,
+            "controls": "30f7c6f36f080a03777802fef53394370835f8e991fd21e46cc93ffae70ad6e1",
+            "git": true,
+            "installed": true,
+            "verifier": {
+              "code": "3238f6f92ac6e9cc9918130351c64693a92905d3ab8b6a4775dd55a6f33b8ddd",
+              "platform": "Windows-11-10.0.26200-SP0",
+              "python": "3.13.12 (tags/v3.13.12:1cbe481, Feb  3 2026, 18:22:25) [MSC v.1944 64 bit (AMD64)]",
+              "tool": "0.1.0"
+            }
+          },
+          "provider_observation": "f3821cb462167fa2bc808e399782d02ed8263713327162da31065127ce5d7cf0"
+        },
+        "reason": "Workspace command binds separate Git worktrees; executor must enforce declared single writer",
+        "scope": "workspaces created through supported command",
+        "status": "ESTABLISHED",
+        "validity_conditions": "Only current observed substrate inside declared envelope"
+      },
+      {
+        "applicability_resolved": true,
+        "authority": "fixed profile / live Git and GitHub",
+        "id": "mutation",
+        "invalidation_triggers": [
+          "rulesets",
+          "protection",
+          "bypass_actors",
+          "required_checks"
+        ],
+        "proof": null,
+        "reason": "Live required PR, merge queue, sourced check, non-fast-forward/deletion protection and no bypass required",
+        "scope": "GitHub target-ref updates",
+        "status": "OPEN GAP",
+        "validity_conditions": "Only current observed substrate inside declared envelope"
+      },
+      {
+        "applicability_resolved": true,
+        "authority": "fixed profile / live Git and GitHub",
+        "id": "candidate-freshness",
+        "invalidation_triggers": [
+          "candidate",
+          "verification"
+        ],
+        "proof": {
+          "local": {
+            "authority_matches_origin": true,
+            "clean": false,
+            "controls": "30f7c6f36f080a03777802fef53394370835f8e991fd21e46cc93ffae70ad6e1",
+            "git": true,
+            "installed": true,
+            "verifier": {
+              "code": "3238f6f92ac6e9cc9918130351c64693a92905d3ab8b6a4775dd55a6f33b8ddd",
+              "platform": "Windows-11-10.0.26200-SP0",
+              "python": "3.13.12 (tags/v3.13.12:1cbe481, Feb  3 2026, 18:22:25) [MSC v.1944 64 bit (AMD64)]",
+              "tool": "0.1.0"
+            }
+          },
+          "provider_observation": "f3821cb462167fa2bc808e399782d02ed8263713327162da31065127ce5d7cf0"
+        },
+        "reason": "Verifier binds explicit head/base/result/config/inputs/environment and rejects changed subjects",
+        "scope": "local verification evidence; remote acceptance evaluated separately",
+        "status": "ESTABLISHED",
+        "validity_conditions": "Only current observed substrate inside declared envelope"
+      },
+      {
+        "applicability_resolved": true,
+        "authority": "fixed profile / live Git and GitHub",
+        "id": "provenance",
+        "invalidation_triggers": [
+          "workflow",
+          "expected_app_id",
+          "verifier_source"
+        ],
+        "proof": null,
+        "reason": "Expected App is necessary but insufficient: trusted verifier implementation and candidate-independent wiring not yet attested by this version",
+        "scope": "accepted integration evidence producer",
+        "status": "OPEN GAP",
+        "validity_conditions": "Only current observed substrate inside declared envelope"
+      },
+      {
+        "applicability_resolved": true,
+        "authority": "fixed profile / live Git and GitHub",
+        "id": "integration",
+        "invalidation_triggers": [
+          "rulesets",
+          "protection",
+          "bypass_actors",
+          "required_checks"
+        ],
+        "proof": null,
+        "reason": "Live required PR, merge queue, sourced check, non-fast-forward/deletion protection and no bypass required",
+        "scope": "GitHub target-ref updates",
+        "status": "OPEN GAP",
+        "validity_conditions": "Only current observed substrate inside declared envelope"
+      },
+      {
+        "applicability_resolved": true,
+        "authority": "fixed profile / live Git and GitHub",
+        "id": "guarantee-freshness",
+        "invalidation_triggers": [
+          "provider_fingerprint",
+          "config",
+          "envelope"
+        ],
+        "proof": {
+          "local": {
+            "authority_matches_origin": true,
+            "clean": false,
+            "controls": "30f7c6f36f080a03777802fef53394370835f8e991fd21e46cc93ffae70ad6e1",
+            "git": true,
+            "installed": true,
+            "verifier": {
+              "code": "3238f6f92ac6e9cc9918130351c64693a92905d3ab8b6a4775dd55a6f33b8ddd",
+              "platform": "Windows-11-10.0.26200-SP0",
+              "python": "3.13.12 (tags/v3.13.12:1cbe481, Feb  3 2026, 18:22:25) [MSC v.1944 64 bit (AMD64)]",
+              "tool": "0.1.0"
+            }
+          },
+          "provider_observation": "f3821cb462167fa2bc808e399782d02ed8263713327162da31065127ce5d7cf0"
+        },
+        "reason": "Doctor re-observes current provider/configuration; saved activation digest cannot survive drift",
+        "scope": "observed closure and applicability",
+        "status": "ESTABLISHED",
+        "validity_conditions": "Only current observed substrate inside declared envelope"
+      },
+      {
+        "applicability_resolved": true,
+        "authority": "fixed profile / live Git and GitHub",
+        "id": "na-freshness",
+        "invalidation_triggers": [
+          "provider_fingerprint",
+          "config",
+          "envelope"
+        ],
+        "proof": {
+          "local": {
+            "authority_matches_origin": true,
+            "clean": false,
+            "controls": "30f7c6f36f080a03777802fef53394370835f8e991fd21e46cc93ffae70ad6e1",
+            "git": true,
+            "installed": true,
+            "verifier": {
+              "code": "3238f6f92ac6e9cc9918130351c64693a92905d3ab8b6a4775dd55a6f33b8ddd",
+              "platform": "Windows-11-10.0.26200-SP0",
+              "python": "3.13.12 (tags/v3.13.12:1cbe481, Feb  3 2026, 18:22:25) [MSC v.1944 64 bit (AMD64)]",
+              "tool": "0.1.0"
+            }
+          },
+          "provider_observation": "f3821cb462167fa2bc808e399782d02ed8263713327162da31065127ce5d7cf0"
+        },
+        "reason": "Doctor re-observes current provider/configuration; saved activation digest cannot survive drift",
+        "scope": "observed closure and applicability",
+        "status": "ESTABLISHED",
+        "validity_conditions": "Only current observed substrate inside declared envelope"
+      },
+      {
+        "applicability_resolved": true,
+        "authority": "fixed profile / live Git and GitHub",
+        "id": "recovery",
+        "invalidation_triggers": [
+          "installation",
+          "config",
+          "runtime"
+        ],
+        "proof": {
+          "local": {
+            "authority_matches_origin": true,
+            "clean": false,
+            "controls": "30f7c6f36f080a03777802fef53394370835f8e991fd21e46cc93ffae70ad6e1",
+            "git": true,
+            "installed": true,
+            "verifier": {
+              "code": "3238f6f92ac6e9cc9918130351c64693a92905d3ab8b6a4775dd55a6f33b8ddd",
+              "platform": "Windows-11-10.0.26200-SP0",
+              "python": "3.13.12 (tags/v3.13.12:1cbe481, Feb  3 2026, 18:22:25) [MSC v.1944 64 bit (AMD64)]",
+              "tool": "0.1.0"
+            }
+          },
+          "provider_observation": "f3821cb462167fa2bc808e399782d02ed8263713327162da31065127ce5d7cf0"
+        },
+        "reason": "Reconcile re-observes provider and invalidates stale local projections without conversational memory",
+        "scope": "supported local lifecycle commands; remote enforcement separately evaluated",
+        "status": "ESTABLISHED",
+        "validity_conditions": "Only current observed substrate inside declared envelope"
+      },
+      {
+        "applicability_resolved": true,
+        "authority": "fixed profile / live Git and GitHub",
+        "id": "break-glass",
+        "invalidation_triggers": [
+          "installation",
+          "config",
+          "runtime"
+        ],
+        "proof": {
+          "local": {
+            "authority_matches_origin": true,
+            "clean": false,
+            "controls": "30f7c6f36f080a03777802fef53394370835f8e991fd21e46cc93ffae70ad6e1",
+            "git": true,
+            "installed": true,
+            "verifier": {
+              "code": "3238f6f92ac6e9cc9918130351c64693a92905d3ab8b6a4775dd55a6f33b8ddd",
+              "platform": "Windows-11-10.0.26200-SP0",
+              "python": "3.13.12 (tags/v3.13.12:1cbe481, Feb  3 2026, 18:22:25) [MSC v.1944 64 bit (AMD64)]",
+              "tool": "0.1.0"
+            }
+          },
+          "provider_observation": "f3821cb462167fa2bc808e399782d02ed8263713327162da31065127ce5d7cf0"
+        },
+        "reason": "Explicit local exceptional lifecycle record invalidates managed authority; does not grant GitHub bypass permissions",
+        "scope": "supported local lifecycle commands; remote enforcement separately evaluated",
+        "status": "ESTABLISHED",
+        "validity_conditions": "Only current observed substrate inside declared envelope"
+      },
+      {
+        "applicability_resolved": true,
+        "authority": "fixed profile / live Git and GitHub",
+        "id": "closure",
+        "invalidation_triggers": [
+          "installation",
+          "config",
+          "runtime"
+        ],
+        "proof": {
+          "local": {
+            "authority_matches_origin": true,
+            "clean": false,
+            "controls": "30f7c6f36f080a03777802fef53394370835f8e991fd21e46cc93ffae70ad6e1",
+            "git": true,
+            "installed": true,
+            "verifier": {
+              "code": "3238f6f92ac6e9cc9918130351c64693a92905d3ab8b6a4775dd55a6f33b8ddd",
+              "platform": "Windows-11-10.0.26200-SP0",
+              "python": "3.13.12 (tags/v3.13.12:1cbe481, Feb  3 2026, 18:22:25) [MSC v.1944 64 bit (AMD64)]",
+              "tool": "0.1.0"
+            }
+          },
+          "provider_observation": "f3821cb462167fa2bc808e399782d02ed8263713327162da31065127ce5d7cf0"
+        },
+        "reason": "Entry locates config, lifecycle and fresh complete Doctor report; saved reports are projections",
+        "scope": "supported local lifecycle commands; remote enforcement separately evaluated",
+        "status": "ESTABLISHED",
+        "validity_conditions": "Only current observed substrate inside declared envelope"
+      },
+      {
+        "applicability_resolved": true,
+        "authority": "fixed profile / live Git and GitHub",
+        "id": "fresh-agent",
+        "invalidation_triggers": [
+          "installation",
+          "config",
+          "runtime"
+        ],
+        "proof": {
+          "local": {
+            "authority_matches_origin": true,
+            "clean": false,
+            "controls": "30f7c6f36f080a03777802fef53394370835f8e991fd21e46cc93ffae70ad6e1",
+            "git": true,
+            "installed": true,
+            "verifier": {
+              "code": "3238f6f92ac6e9cc9918130351c64693a92905d3ab8b6a4775dd55a6f33b8ddd",
+              "platform": "Windows-11-10.0.26200-SP0",
+              "python": "3.13.12 (tags/v3.13.12:1cbe481, Feb  3 2026, 18:22:25) [MSC v.1944 64 bit (AMD64)]",
+              "tool": "0.1.0"
+            }
+          },
+          "provider_observation": "f3821cb462167fa2bc808e399782d02ed8263713327162da31065127ce5d7cf0"
+        },
+        "reason": "Installed entry and CLI expose authority, Issue/PR discovery, workspace binding and recovery",
+        "scope": "supported local lifecycle commands; remote enforcement separately evaluated",
+        "status": "ESTABLISHED",
+        "validity_conditions": "Only current observed substrate inside declared envelope"
+      }
+    ]
+  },
+  "repository": "CHNISam/OpenHarness",
+  "substrate": "9e69db326ea52dfa3cc74e83c257f226b8be7e4f3c2c800ee84845f4d4cc2e40"
+}

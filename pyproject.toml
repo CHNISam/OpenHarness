@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openharness"
+version = "0.2.0"
+description = "Conservative repository guarantee evaluation and GitHub execution tooling"
+requires-python = ">=3.11"
+license = "MIT"
+readme = "README.md"
+dependencies = []
+
+[project.scripts]
+openharness = "openharness.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["openharness*"]
