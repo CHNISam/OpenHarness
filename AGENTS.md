@@ -19,6 +19,20 @@ Do not turn configuration declarations or fixture test success into proof of liv
 provider enforcement. Missing/unknown/stale observations remain explicit OPEN GAP.
 Do not create local ownership claims that pretend to fence remote writers.
 
+
+## Agent feedback and contribution
+
+Treat friction observed during real Agent use as product evidence, not something to silently
+work around. If OpenHarness is confusing, unnecessarily costly, missing a reusable capability,
+produces a false positive/negative, or makes a legal workflow difficult to discover, open a
+GitHub Issue with the observed context, expected vs. actual behavior and the smallest useful
+evidence. Use the Agent feedback template when applicable.
+
+When the problem and proof are sufficiently understood, an Agent may propose an Issue-bound PR
+through the normal managed path. Do not weaken a Guarantee, widen the Trust Envelope, or bypass
+native enforcement merely to make the current task easier. Prefer provider/runtime-native
+capabilities and build only the missing OpenHarness delta.
+
 Run `python -m unittest discover -s tests -v` and
 `python -m compileall -q openharness` before reporting implementation changes verified.
 Keep work sequential in the main task. Follow the configured `codex/` branch convention.

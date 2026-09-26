@@ -29,6 +29,24 @@ All commands emit JSON. Exit `0` means that command succeeded, `2` means an open
 stale proof or failing candidate check, and `1` means invalid input/tool failure.
 A successful local verification never authorizes remote integration.
 
+
+## Feedback from real Agent use
+
+OpenHarness is intended to improve from actual use by different agents, runtimes and projects.
+If an Agent or operator encounters confusing behavior, unnecessary ceremony, a missing reusable
+capability, an enforcement false positive/negative, poor discoverability, or another recurring
+friction point, report the observed problem rather than compensating with undocumented local
+workarounds.
+
+Open an Issue using the **Agent feedback** template and include the execution context, expected
+and actual behavior, and the smallest evidence that makes the problem inspectable. If the
+problem is already well understood and a bounded change can be verified, an Issue-bound PR is
+welcome through the normal managed path.
+
+Feedback is evidence, not automatic authority to relax guarantees. Improvements should preserve
+or strengthen the declared execution/trust envelope, prefer native provider/runtime capabilities
+where sufficient, and add only the OpenHarness-specific delta.
+
 ## Bootstrap a target
 
 ```sh
