@@ -59,6 +59,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      issues: read
     outputs:
       head: ${{ steps.check.outputs.head }}
       base: ${{ steps.check.outputs.base }}
@@ -84,6 +85,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      issues: read
       statuses: write
     steps:
 ''' + common + '''      - name: Publish only fresh trusted result

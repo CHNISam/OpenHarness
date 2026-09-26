@@ -25,7 +25,10 @@ def trusted(config, raw):
     if raw.get('controller_blobs') != controller_blobs():
         return False
     policies = raw.get('actions_policies', [])
-    policy = any(p.get('enforcement') == 'active' and not p.get('conditions') and any(
+    def all_workflows(policy):
+        conditions = policy.get('conditions')
+        return not conditions or conditions == {'workflow_path': {'include': ['~ALL'], 'exclude': []}} or conditions == {'workflow_path': {'include': [], 'exclude': []}}
+    policy = any(p.get('enforcement') == 'active' and all_workflows(p) and any(
         r.get('type') == 'restrict_action_events' and r.get('parameters', {}).get('allowed_events') == ['pull_request_target']
         for r in p.get('rules', [])) for p in policies)
     return policy and raw.get('other_target_workflows') == [] and raw.get('canonical_config') == config
