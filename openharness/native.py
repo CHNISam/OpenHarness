@@ -24,6 +24,8 @@ def trusted(config, raw):
         return False
     if raw.get('controller_blobs') != controller_blobs():
         return False
+    if not any(w.get('path') == WORKFLOW_PATH and w.get('state') == 'active' for w in raw.get('workflows', {}).get('workflows', [])):
+        return False
     policies = raw.get('actions_policies', [])
     def all_workflows(policy):
         conditions = policy.get('conditions')
@@ -59,11 +61,7 @@ def observe_controller(config, raw, api, errors):
             policies.append(api(path))
         raw['actions_policies'] = policies
         raw['other_target_workflows'] = []
-        for workflow in raw.get('workflows', {}).get('workflows', []):
-            if workflow.get('path') != WORKFLOW_PATH:
-                content = file_bytes(api, prefix, workflow['path'], ref).decode('utf-8')
-                if 'pull_request_target' in content:
-                    raw['other_target_workflows'].append(workflow['path'])
+        raw['other_target_workflows'] = [path for path in raw.get('workflow_blobs', {}) if path != WORKFLOW_PATH]
     except (ProviderError, ValueError, KeyError, TypeError) as exc:
         errors.append(f'trusted controller: {exc}')
 
@@ -121,6 +119,12 @@ def observe_proof(config, observation, api):
                 if denied.get('result') != 'fail' or denied.get('after_sha') != sha or denied.get('ref') != f'refs/heads/{config["target"]}':
                     raise ProviderError('Invalid integration rejection not observed natively')
             result[name] = {'pr': pull['number'], 'head': sha, 'state': expected, 'run_id': int(match[1])}
+            if name == 'source-spoof':
+                blocked = api(f'{prefix}/actions/runs/{int(case["blocked_run"])}')
+                jobs = api(f'{prefix}/actions/runs/{int(case["blocked_run"])}/jobs?per_page=100')
+                if blocked.get('head_sha') != sha or blocked.get('event') not in ('push', 'pull_request') or blocked.get('conclusion') != 'startup_failure' or jobs.get('total_count') != 0:
+                    raise ProviderError('Candidate-source workflow rejection before execution not observed')
+                result[name]['blocked_run'] = blocked['id']
         suite = api(f'{prefix}/rulesets/rule-suites/{int(cases["direct-update"]["rule_suite_id"])}')
         if suite.get('result') != 'fail' or suite.get('ref') != f'refs/heads/{config["target"]}' or suite.get('after_sha') != cases['direct-update']['head']:
             raise ProviderError('Direct authoritative bypass rejection not observed')

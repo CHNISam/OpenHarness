@@ -87,10 +87,39 @@ class ProviderTests(unittest.TestCase):
                 return {'commit': {'sha': 'a' * 40}}
             if path.endswith('/actions/workflows?per_page=100'):
                 return {'total_count': 0, 'workflows': []}
+            if '/git/trees/' in path:
+                return {'tree': [], 'truncated': False}
             return {'full_name': 'owner/repo', 'id': 1}
 
         GitHub(api).observe(self.config)
         self.assertIn('orgs/owner/rulesets/7', calls)
+
+    def test_unmerged_candidate_workflow_registry_is_not_canonical_drift(self):
+        registry = [{'path': '.github/workflows/ci.yml', 'state': 'active'}]
+        def api(path):
+            if '/actions/workflows?' in path:
+                return {'total_count': len(registry), 'workflows': registry}
+            if '/git/trees/' in path:
+                return {'tree': [{'path': '.github/workflows/ci.yml', 'sha': 'blob', 'type': 'blob', 'mode': '100644'}], 'truncated': False}
+            if '/rulesets?' in path:
+                return [{'id': 7}]
+            if path.endswith('/rulesets/7'):
+                return substrate()['rulesets'][0]
+            if '/rules/branches/' in path:
+                return protected_rules()
+            if path.endswith('/protection'):
+                return None
+            if '/branches/' in path:
+                return substrate()['branch']
+            if '/contents/' in path:
+                self.fail('Provider must derive authoritative workflow blobs from canonical tree')
+            return substrate()['repository']
+        before = GitHub(api).observe(self.config)
+        registry.append({'path': '.github/workflows/forge.yml', 'state': 'active'})
+        after = GitHub(api).observe(self.config)
+        self.assertEqual([], after['errors'])
+        self.assertEqual(before['fingerprint'], after['fingerprint'])
+        self.assertTrue(after['gate'])
 
 
 if __name__ == '__main__':
