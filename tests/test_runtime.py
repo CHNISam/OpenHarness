@@ -1,7 +1,10 @@
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from openharness.model import digest
 from openharness.repository import Repository, bootstrap, json_text
@@ -39,6 +42,46 @@ class RuntimeTests(unittest.TestCase):
         self.provider = FakeGitHub()
         self.provider.sha = self.repo.revision('main')
         self.runtime = Runtime(self.repo, self.provider)
+
+    def test_native_lock_contention_reports_busy_and_recovers_after_holder_exits(self):
+        child = (
+            'import sys\n'
+            'from openharness.repository import Repository\n'
+            'from openharness.runtime import Runtime\n'
+            'with Runtime(Repository(sys.argv[1])).locked():\n'
+            '    print("locked", flush=True)\n'
+            '    sys.stdin.read(1)\n'
+        )
+        process = subprocess.Popen(
+            [sys.executable, '-c', child, str(self.root)],
+            cwd=Path(__file__).resolve().parents[1],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True,
+        )
+        try:
+            self.assertEqual('locked\n', process.stdout.readline())
+            with self.assertRaisesRegex(ValueError, 'Another local lifecycle operation holds the native process lock'):
+                with self.runtime.locked():
+                    pass
+            process.stdin.write('x')
+            process.stdin.flush()
+            self.assertEqual(0, process.wait(timeout=5))
+            with self.runtime.locked():
+                pass
+            self.assertEqual(b'0', (self.runtime.storage / 'operation.lock').read_bytes())
+        finally:
+            if process.poll() is None:
+                process.kill()
+            process.wait(timeout=5)
+            process.stdin.close()
+            process.stdout.close()
+            process.stderr.close()
+
+    def test_lock_file_access_denial_remains_permission_error(self):
+        with patch.object(Path, 'open', side_effect=PermissionError('ACL denied')):
+            with self.assertRaisesRegex(PermissionError, 'ACL denied'):
+                with self.runtime.locked():
+                    pass
 
     def test_release_refuses_unintegrated_work_and_handoff_preserves_binding(self):
         binding = self.repo.workspace(1, 'fix', self.repo.revision('HEAD'))

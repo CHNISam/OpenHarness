@@ -39,10 +39,6 @@ class Runtime:
         path = safe_path(self.storage, 'operation.lock')
         with path.open('a+b') as stream:
             stream.seek(0)
-            if stream.read(1) == b'':
-                stream.write(b'0')
-                stream.flush()
-            stream.seek(0)
             try:
                 if os.name == 'nt':
                     import msvcrt
@@ -53,6 +49,10 @@ class Runtime:
             except OSError as exc:
                 raise ValueError('Another local lifecycle operation holds the native process lock; retry after it exits') from exc
             try:
+                stream.seek(0)
+                if stream.read(1) == b'':
+                    stream.write(b'0')
+                    stream.flush()
                 yield
             finally:
                 stream.seek(0)
