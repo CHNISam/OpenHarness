@@ -33,7 +33,8 @@ class ProofTests(unittest.TestCase):
             number = int(path.split('/commits/')[1][0])
             return [{'context': self.config['verification']['required_check'], 'state': 'success' if number == 1 else 'failure', 'creator': {'login': 'github-actions[bot]'}, 'target_url': f'https://github.com/owner/repo/actions/runs/{number}'}]
         if '/actions/runs/' in path:
-            return {'event': self.run_event, 'path': WORKFLOW_PATH, 'status': 'completed', 'head_sha': 'b' * 40}
+            number = int(path.rsplit('/', 1)[1])
+            return {'event': self.run_event, 'path': WORKFLOW_PATH, 'status': 'completed', 'head_sha': str(number) * 40, 'pull_requests': [{'number': number, 'head': {'sha': str(number) * 40}, 'base': {'sha': 'b' * 40}}]}
         if '/git/commits/' in path:
             return {'tree': {'sha': self.merged_tree if path.endswith('a' * 40) else 'tree'}}
         if '/rule-suites/' in path:
