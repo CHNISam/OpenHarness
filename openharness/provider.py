@@ -106,7 +106,8 @@ class GitHub:
                     raw['workflow_blobs'][path] = item['sha']
             # Actions registry includes unmerged candidate workflows. Only canonical
             # source owns baseline authority; candidate registration is not policy drift.
-            raw['workflows'] = {'workflows': [w for w in workflows.get('workflows', []) if w.get('path') in raw['workflow_blobs']]}
+            raw['workflows'] = {'workflows': [{'id': w.get('id'), 'path': w['path'], 'state': w.get('state')}
+                for w in workflows.get('workflows', []) if w.get('path') in raw['workflow_blobs']]}
         except (ProviderError, ValueError, KeyError, TypeError) as exc:
             errors.append(f'canonical workflow tree: {exc}')
         from .native import observe_controller, observe_proof
