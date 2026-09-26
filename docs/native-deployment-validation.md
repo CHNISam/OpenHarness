@@ -1,37 +1,44 @@
-# Native deployment proof, 2026-09-26
+# Native deployment validation, 2026-09-26
 
-These are native observations, not activation authority. Run `openharness entry`
-and `doctor` for current lifecycle and all 16 guarantees.
+Run `openharness entry` and `doctor` for current lifecycle and all 16 guarantees.
+This document is a dated observation, never activation authority.
 
-- Canonical controller: immutable source `a2c316748cd89ac1f57f6e4faec35edbf4c2736b`.
-- Native Actions event policy: 5742; branch ruleset: 24036561; no bypass actors.
-- Windows local suite: 68 tests passed without skips. Trusted Linux Docker suite passed.
-- Legal candidate [PR 8](https://github.com/CHNISam/OpenHarness/pull/8) passed trusted
-  [run 36231981559](https://github.com/CHNISam/OpenHarness/actions/runs/36231981559)
-  and merged. Native integrated tree equals the tested head tree.
-- Invalid [PR 4](https://github.com/CHNISam/OpenHarness/pull/4) failed candidate acceptance;
-  native merge returned HTTP 405, required status failing. Failed rule suite 4239052127.
-- Source-spoof [PR 6](https://github.com/CHNISam/OpenHarness/pull/6) lacked exact control
-  approval and failed. Candidate push and PR event workflows were rejected before any
-  job executed; [blocked run](https://github.com/CHNISam/OpenHarness/actions/runs/36231969711).
-  Native merge returned HTTP 405; failed rule suite 4239052547.
-- The successful legal head also failed a direct main-ref push: native rules require
-  a merge commit when squash/rebase are forbidden. Failed rule suite 4239052746.
+Immutable producer source: `d85c0df27f1c93d69aa40bc6c4401ae3258c90a5`. Native Actions event policy: 5742.
+Main ruleset: 24036561, strict merge-only checks from GitHub Actions App 15368,
+non-fast-forward/deletion protection and no bypass actors. Repository Actions is
+enabled; this conservative adapter supports the observed `allowed_actions: all`.
+Selection policies require an applicable adapter and remain OPEN GAP.
 
-`.harness/deployment-proof.json` stores only provider references and the policy
-fingerprint. Doctor re-fetches PR subjects, sourced statuses, historical baseline,
-native runs/job counts, integrated trees and failed rule suites. Changed policy,
-config/tool pins, workflow state or incomplete observation invalidates proof.
+Windows local suite: 72 tests passed without skips. The trusted Linux Docker suite
+passed for the legal candidate. Every controlled Harness code/test/contract change
+requires exact native owner approval; config changes test old and proposed acceptance.
 
-Deployment found and fixed real API normalization, candidate-inclusive workflow
-registry and Windows CRLF continuity issues. Canonical Git source determines baseline
-authority; registry display names/timestamps and unmerged candidates do not.
+Native cases in `.harness/deployment-proof.json`:
 
-The bounded envelope trusts a single local writer, repository policy operators and
-CI maintainers. Physical local writes and privileged policy reconfiguration remain
-explicit exclusions. Competing/unknown writers need effective ownership/fencing;
-the profile does not substitute a claim file for enforcement.
+| Case | Native subject | Result |
+| --- | --- | --- |
+| valid | [PR 11](https://github.com/CHNISam/OpenHarness/pull/11) | Trusted success, native integration, result tree equals tested head tree |
+| invalid | [PR 12](https://github.com/CHNISam/OpenHarness/pull/12) | Authorized deliberately failing acceptance; merge HTTP 405; rule suite 4239309295 failed |
+| source-spoof | [PR 13](https://github.com/CHNISam/OpenHarness/pull/13) | Control approval absent; merge HTTP 405; rule suite 4239309677 failed |
+| direct-update | Legal verified head | Main push rejected: merge commit required; rule suite 4239309876 failed |
 
-Managed control upgrades retain native protection and exact owner approval. Staging
-changed controls can invalidate local Managed readiness; finish through the same
-native protected PR protocol and refresh proof before reactivation. No bypass is granted.
+The source-spoof [native run](https://github.com/CHNISam/OpenHarness/actions/runs/36234408922)
+was rejected at startup before any job ran. It could not mint the accepted App status.
+
+Doctor re-fetches exact PR heads, sourced statuses, native runs, publisher job logs,
+historical baseline/config, blocked job counts, result trees and failed rule suites.
+Merged PRs disappear from run association lists: actual publisher checkout SHA comes
+from the native job log instead. Missing/expired logs block proof. The immutable
+producer's complete executed dependencies are checked; observer-only code is not
+mistaken for evidence-producing code. Local verifier code/runtime still binds activation.
+
+Policy/config/source pins, workflow state and repository Actions availability affect
+the live fingerprint. Scope is one trusted local writer per workspace, trusted policy
+operators and CI maintainers; physical local writes and privileged policy reconfiguration
+are explicit exclusions. Competing/unknown writers require effective ownership/fencing.
+No claim file, saved report or configuration boolean substitutes for native proof.
+
+Earlier v0.1 reports and initial probe snapshots are historical. This record and the
+canonical reference file supersede their deployment conclusions. Activation is a
+separate complete live transition. Managed control staging can invalidate readiness;
+finish through the same protected native PR protocol, refresh proof and reactivate.
