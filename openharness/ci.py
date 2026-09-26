@@ -179,6 +179,12 @@ def control_authorized(config, context, api=gh_api):
                and expected in comment.get('body', '').splitlines() for comment in comments)
 
 
+def control_change(config, paths):
+    own_tool = (config['verification'].get('controller') or {}).get('repository', '').lower() == config['repository'].lower()
+    return any(p.startswith(('.github/', '.harness/')) or p == 'AGENTS.md'
+               or (own_tool and (p.startswith(('openharness/', 'tests/', 'docs/contracts/')) or p == 'pyproject.toml')) for p in paths)
+
+
 def check_candidate(config, baseline, root, event, api=gh_api):
     context = current_context(config, event, api)
     if Repository(baseline).revision('HEAD') != context['base']:
@@ -192,7 +198,7 @@ def check_candidate(config, baseline, root, event, api=gh_api):
     if tree != merged:
         raise ValueError('Strict candidate head must equal intended integration result tree')
     changed = repo.git('diff', '--name-only', '--no-renames', context['base'], context['head']).splitlines()
-    protected = any(p.startswith(('.github/', '.harness/')) or p == 'AGENTS.md' for p in changed)
+    protected = control_change(config, changed)
     authorized = control_authorized(config, context, api) if protected else False
     if protected and not authorized:
         raise ValueError('Protected control change requires native owner approval bound to head and base')

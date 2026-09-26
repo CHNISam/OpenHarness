@@ -11,6 +11,7 @@ from openharness.native import observe_proof
 class ProofTests(unittest.TestCase):
     def setUp(self):
         self.config = default_config('owner/repo', 'main')
+        self.config['verification']['controller'] = {'repository': 'owner/repo', 'revision': 'a' * 40}
         self.observation = {'gate': True, 'trusted_controller': True, 'fingerprint': 'policy', 'target_sha': 'b' * 40}
         self.proof = {'schema': 1, 'repository': 'owner/repo', 'policy': 'policy', 'cases': {
             'valid': {'pr': 1, 'head': '1' * 40},
@@ -24,6 +25,8 @@ class ProofTests(unittest.TestCase):
     def api(self, path):
         if '/actions/runs/9/jobs' in path:
             return {'total_count': 0, 'jobs': []}
+        if '/actions/runs/' in path and '/jobs?' in path:
+            return {'total_count': 1, 'jobs': [{'id': 8, 'name': 'publish', 'status': 'completed', 'conclusion': 'success'}]}
         if path.endswith('/actions/runs/9'):
             return {'id': 9, 'head_sha': '3' * 40, 'event': 'push', 'conclusion': 'startup_failure'}
         if '/contents/' in path:
@@ -38,7 +41,7 @@ class ProofTests(unittest.TestCase):
             return [{'context': self.config['verification']['required_check'], 'state': 'success' if number == 1 else 'failure', 'creator': {'login': 'github-actions[bot]'}, 'target_url': f'https://github.com/owner/repo/actions/runs/{number}'}]
         if '/actions/runs/' in path:
             number = int(path.rsplit('/', 1)[1])
-            return {'event': self.run_event, 'path': WORKFLOW_PATH, 'status': 'completed', 'head_sha': str(number) * 40, 'pull_requests': [{'number': number, 'head': {'sha': str(number) * 40}, 'base': {'sha': 'b' * 40}}]}
+            return {'id': number, 'event': self.run_event, 'path': WORKFLOW_PATH, 'status': 'completed', 'head_sha': str(number) * 40, 'pull_requests': []}
         if '/git/commits/' in path:
             return {'tree': {'sha': self.merged_tree if path.endswith('a' * 40) else 'tree'}}
         if '/rule-suites/' in path:
@@ -47,11 +50,11 @@ class ProofTests(unittest.TestCase):
         raise AssertionError(path)
 
     def test_complete_native_proof_is_observed(self):
-        self.assertTrue(observe_proof(self.config, self.observation, self.api)['valid'])
+        self.assertTrue(observe_proof(self.config, self.observation, self.api, self.logs)['valid'])
 
     def test_candidate_workflow_cannot_supply_provenance(self):
         self.run_event = 'pull_request'
-        self.assertFalse(observe_proof(self.config, self.observation, self.api)['valid'])
+        self.assertFalse(observe_proof(self.config, self.observation, self.api, self.logs)['valid'])
 
     def test_drift_missing_case_different_tree_or_unenforced_denial_blocks(self):
         for alteration in ('drift', 'missing', 'tree', 'denial'):
@@ -65,6 +68,13 @@ class ProofTests(unittest.TestCase):
                     self.merged_tree = 'different'
                 else:
                     self.denial = 'pass'
-                self.assertFalse(observe_proof(self.config, self.observation, self.api)['valid'])
+                self.assertFalse(observe_proof(self.config, self.observation, self.api, self.logs)['valid'])
                 self.proof = saved
                 self.merged_tree, self.denial = 'tree', 'fail'
+
+    def logs(self, path):
+        return '2026-09-26T09:11:22Z   ref: ' + 'b' * 40 + '\n2026-09-26T09:11:23Z   ref: ' + 'a' * 40 + '\n'
+
+    def test_wrong_executed_source_or_expired_native_log_blocks(self):
+        self.assertFalse(observe_proof(self.config, self.observation, self.api, lambda _: '')['valid'])
+        self.assertFalse(observe_proof(self.config, self.observation, self.api, lambda _: self.logs('').replace('a' * 40, 'f' * 40))['valid'])
