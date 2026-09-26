@@ -1,26 +1,26 @@
 {
   "cases": {
     "direct-update": {
-      "head": "6190e1ec357e9a3bb8f94cf3aeb0904e3ef90e50",
-      "rule_suite_id": 4239052746
+      "head": "e3edc228670021dbd7d9dd38811791a3796f10e7",
+      "rule_suite_id": 4239309876
     },
     "invalid": {
-      "head": "3681781331d49173112fbd3bc5b4d2bc25145bf3",
-      "pr": 4,
-      "rule_suite_id": 4239052127
+      "head": "a3ae82b5b002f0ed692f244d0c59c77e4eefe39f",
+      "pr": 12,
+      "rule_suite_id": 4239309295
     },
     "source-spoof": {
-      "blocked_run": 36231969711,
-      "head": "6adb760aba906ce25a97e6088e6f41495e1e004c",
-      "pr": 6,
-      "rule_suite_id": 4239052547
+      "blocked_run": 36234408922,
+      "head": "c6bdba09cb128c6e97b8deb40d33633c69f406d5",
+      "pr": 13,
+      "rule_suite_id": 4239309677
     },
     "valid": {
-      "head": "6190e1ec357e9a3bb8f94cf3aeb0904e3ef90e50",
-      "pr": 8
+      "head": "e3edc228670021dbd7d9dd38811791a3796f10e7",
+      "pr": 11
     }
   },
-  "policy": "53db21eb0c109d3e07f8f28269ac75874d0c914903a4549f3fb36d2e57886713",
+  "policy": "e66a23e45ae013f6e6073564cf9778c08aa681e3f07f7eed852ffd12ac56eb5c",
   "repository": "CHNISam/OpenHarness",
   "schema": 1
 }
