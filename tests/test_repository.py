@@ -14,6 +14,17 @@ class RepositoryTests(unittest.TestCase):
         self.root = make_repo(self.temp.name)
         self.repo = Repository(self.root)
 
+    def test_native_checkout_line_endings_do_not_invalidate_same_controls(self):
+        bootstrap(self.repo, 'owner/repo', 'main')
+        original = self.repo.local()['controls']
+        for relative in ('.harness/config.json', '.harness/AGENT.md', 'AGENTS.md'):
+            path = self.root / relative
+            path.write_bytes(path.read_bytes().replace(b'\r\n', b'\n').replace(b'\n', b'\r\n'))
+        self.assertEqual(original, self.repo.local()['controls'])
+        self.assertTrue(self.repo.local()['installed'])
+        (self.root / 'AGENTS.md').write_text('Different controls\n', encoding='utf-8')
+        self.assertNotEqual(original, self.repo.local()['controls'])
+
     def test_install_is_repeatable_and_preserves_existing_instructions(self):
         (self.root / 'AGENTS.md').write_text('Project preferences.\n', encoding='utf-8')
         bootstrap(self.repo, 'owner/repo', 'main')
