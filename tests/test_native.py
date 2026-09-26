@@ -1,7 +1,7 @@
 import copy
 import unittest
 
-from openharness.ci import controller_blobs, event_policy, workflow_text
+from openharness.ci import WORKFLOW_PATH, controller_blobs, event_policy, workflow_text
 from openharness.model import default_config
 from openharness.native import trusted
 from openharness.provider import summarize
@@ -14,6 +14,7 @@ class NativeTests(unittest.TestCase):
         self.config['verification'].update(expected_app_id=42, controller={'repository': 'owner/tool', 'revision': 'a' * 40}, sandbox_image='python@sha256:' + 'a' * 64)
         self.raw = substrate()
         self.raw.update(controller_workflow=workflow_text(), controller_blobs=controller_blobs(), actions_policies=[event_policy()], other_target_workflows=[], canonical_config=copy.deepcopy(self.config))
+        self.raw['workflows'] = {'workflows': [{'path': WORKFLOW_PATH, 'state': 'active'}]}
 
     def test_provenance_requires_real_native_inputs(self):
         self.assertTrue(trusted(self.config, self.raw))
@@ -24,6 +25,10 @@ class NativeTests(unittest.TestCase):
 
     def test_evaluate_policy_is_not_enforcement(self):
         self.raw['actions_policies'][0]['enforcement'] = 'evaluate'
+        self.assertFalse(trusted(self.config, self.raw))
+
+    def test_disabled_controller_cannot_claim_provenance(self):
+        self.raw['workflows']['workflows'][0]['state'] = 'disabled_manually'
         self.assertFalse(trusted(self.config, self.raw))
 
     def test_native_all_workflows_normalization_is_equivalent(self):
