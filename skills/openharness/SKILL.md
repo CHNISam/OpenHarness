@@ -25,7 +25,7 @@ For other profiles or changed CLI behavior, follow the installed `.harness/AGENT
 
 ## Recover without bypassing authority
 
-Inspect the failed command, `entry`, and `doctor` for the exact gap. A temporary provider observation failure can make a fresh Doctor differ from an earlier one; re-observe before changing lifecycle state. If reconciliation is needed, use `reconcile` and preserve the worktree. It can invalidate activation and does not reactivate automatically. Return to managed operation only through a complete live readiness assessment and `activate`; resolve remaining gaps first.
+Inspect the failed command, `entry`, and `doctor` for the exact gap. A temporary provider observation failure can make a fresh Doctor differ from an earlier one; re-observe before changing lifecycle state. A source checkout behind the target may carry older control files than a new worktree; compare them and legally update a clean source checkout before reactivation. If reconciliation is needed, use `reconcile` and preserve the worktree. It can invalidate activation and does not reactivate automatically. Return to managed operation only through a complete live readiness assessment and `activate`; resolve remaining gaps first.
 
 An active lifecycle command may hold the native process lock. Wait for that command to exit before retrying; do not delete the lock file or edit Harness runtime state. If integration rejects a dirty candidate, inspect and preserve the unexpected changes, then form and verify a clean exact candidate. Never merge directly, forge accepted evidence, or use local verification as a substitute for the trusted provider gate. Use `handoff --reason TEXT` when work must continue in a later session.
 
