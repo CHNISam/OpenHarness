@@ -23,7 +23,7 @@ def now():
 
 def execution_identity():
     from pathlib import Path
-    code = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in Path(__file__).parent.glob('*.py')}
+    code = {p.name: hashlib.sha256(p.read_bytes().replace(b'\r\n', b'\n')).hexdigest() for p in Path(__file__).parent.glob('*.py')}
     return {'tool': __version__, 'code': digest(code), 'python': sys.version, 'platform': platform.platform()}
 
 
