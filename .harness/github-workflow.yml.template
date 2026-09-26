@@ -1,0 +1,16 @@
+# REVIEW TEMPLATE ONLY: candidate-controlled workflow is not trusted provenance.
+# Install a pinned verifier through provider-enforced candidate-independent wiring.
+name: openharness
+on:
+  pull_request:
+  merge_group:
+permissions:
+  contents: read
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require trusted verifier installation
+        run: |
+          echo 'OPEN GAP: wire an independently trusted pinned verifier before activation'
+          exit 1

@@ -1,0 +1,85 @@
+"""JSON CLI; exit 2 is an explicit open gap/failed proof, never success."""
+
+import argparse
+import json
+import subprocess
+import sys
+
+from . import __version__
+from .repository import Repository, bootstrap, json_text
+from .runtime import Runtime
+
+
+def parser():
+    command = argparse.ArgumentParser(description='OpenHarness GitHub profile (v0.1: no full closure/provenance adapter)')
+    command.add_argument('--repo', default='.', help='Target repository path')
+    command.add_argument('--version', action='version', version=__version__)
+    commands = command.add_subparsers(dest='command', required=True)
+    install = commands.add_parser('bootstrap', help='Stage missing project-local mechanisms without activation')
+    install.add_argument('--repository', help='owner/repository; defaults to origin')
+    install.add_argument('--target', default='main')
+    for name, help_text in (
+        ('doctor', 'Observe live GitHub substrate and evaluate every candidate guarantee'),
+        ('entry', 'Discover instructions, authority, work and current closure'),
+        ('activate', 'Require complete live closure before entering managed operation'),
+        ('preflight', 'Reject invalid protected transition'),
+        ('reconcile', 'Observe authoritative state and invalidate stale local projections'),
+        ('upgrade', 'Stage installer upgrade through applicable lifecycle governance'),
+        ('setup-plan', 'Emit reviewable remote setup proposal without applying it'),
+    ):
+        commands.add_parser(name, help=help_text)
+    exceptional = commands.add_parser('break-glass', help='Record local exceptional recovery; grants no remote bypass')
+    exceptional.add_argument('--reason', required=True)
+    workspace = commands.add_parser('workspace', help='Bind an open Issue/Change to a native isolated worktree')
+    workspace.add_argument('--issue', type=int, required=True)
+    workspace.add_argument('--change', required=True)
+    workspace.add_argument('--genesis', action='store_true', help='Explicit bootstrap installer authority, only before activation')
+    for name in ('candidate', 'verify', 'evidence'):
+        candidate = commands.add_parser(name, help='Candidate-bound local diagnostics (not remote integration authority)')
+        candidate.add_argument('--head', required=True)
+        candidate.add_argument('--base', required=True, help='Explicit intended target revision/ref; no implicit moving base')
+        if name == 'verify':
+            candidate.add_argument('--timeout', type=int, default=300, help='Per-command timeout in seconds')
+    return command
+
+
+def main(argv=None):
+    args = parser().parse_args(argv)
+    try:
+        repo = Repository(args.repo)
+        runtime = Runtime(repo)
+        exit_code = 0
+        if args.command == 'bootstrap':
+            result = bootstrap(repo, args.repository, args.target)
+        elif args.command == 'break-glass':
+            result = runtime.break_glass(args.reason)
+        elif args.command == 'workspace':
+            result = runtime.workspace(args.issue, args.change, args.genesis)
+        elif args.command == 'candidate':
+            from .model import candidate_id
+            candidate = runtime._verification_candidate(args.head, args.base)
+            result = {'candidate': candidate, 'candidate_id': candidate_id(candidate), 'authority': 'local-diagnostic-only'}
+        elif args.command == 'verify':
+            if args.timeout <= 0:
+                raise ValueError('Timeout must be positive')
+            result = runtime.verify(args.head, args.base, args.timeout)
+            exit_code = 0 if result['passed'] else 2
+        elif args.command == 'evidence':
+            result = runtime.evidence(args.head, args.base)
+            exit_code = 0 if result['fresh'] else 2
+        else:
+            action = getattr(runtime, args.command.replace('-', '_'))
+            result = action()
+            if args.command == 'doctor':
+                exit_code = 0 if result['closure'] else 2
+            elif args.command in ('entry', 'reconcile'):
+                exit_code = 0 if result['doctor']['closure'] else 2
+        print(json_text(result), end='')
+        return exit_code
+    except (ValueError, OSError, subprocess.SubprocessError, KeyError, TypeError) as exc:
+        print(json_text({'error': str(exc), 'command': args.command, 'closure': False}), file=sys.stderr, end='')
+        return 1
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

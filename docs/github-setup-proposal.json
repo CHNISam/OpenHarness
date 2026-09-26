@@ -1,0 +1,60 @@
+{
+  "activation_possible_in_this_version": false,
+  "mode": "proposal-only",
+  "repository": "CHNISam/OpenHarness",
+  "ruleset": {
+    "bypass_actors": [],
+    "conditions": {
+      "ref_name": {
+        "exclude": [],
+        "include": [
+          "refs/heads/main"
+        ]
+      }
+    },
+    "enforcement": "active",
+    "name": "OpenHarness integration",
+    "rules": [
+      {
+        "parameters": {
+          "allowed_merge_methods": [
+            "merge"
+          ],
+          "dismiss_stale_reviews_on_push": true,
+          "require_code_owner_review": true,
+          "require_last_push_approval": true,
+          "required_approving_review_count": 1,
+          "required_review_thread_resolution": true
+        },
+        "type": "pull_request"
+      },
+      {
+        "type": "non_fast_forward"
+      },
+      {
+        "type": "deletion"
+      },
+      {
+        "parameters": {
+          "required_status_checks": [
+            {
+              "context": "openharness / candidate",
+              "integration_id": null
+            }
+          ],
+          "strict_required_status_checks_policy": true
+        },
+        "type": "required_status_checks"
+      }
+    ],
+    "target": "branch"
+  },
+  "target": "main",
+  "unresolved": [
+    "Discover and configure trusted check App id; null must never be applied as any-source acceptance",
+    "Configure provider-native merge queue and require its effective rule",
+    "Install independently trusted verifier and protect its control surfaces",
+    "Wire required check on both pull_request and merge_group; template intentionally fails until wired",
+    "Run live invalid/valid/bypass/provenance deployment proof; no proof adapter is implemented in v0.1"
+  ]
+}

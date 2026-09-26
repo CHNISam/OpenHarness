@@ -1,0 +1,36 @@
+{
+  "authorities": {
+    "change": "github-pull-requests",
+    "evidence": "github-checks",
+    "integration": "github-rules",
+    "product": "repository-docs",
+    "revision": "github-target-ref",
+    "work": "github-issues",
+    "workspace": "git-worktree"
+  },
+  "envelope": {
+    "excluded_transitions": [
+      "arbitrary-local-writes",
+      "administrator-policy-reconfiguration"
+    ],
+    "trusted_actors": [
+      "repository-admins",
+      "ci-maintainers",
+      "local-executor"
+    ],
+    "workspace_writers": "single"
+  },
+  "profile": "github-pr-v1",
+  "repository": "CHNISam/OpenHarness",
+  "schema": 1,
+  "target": "main",
+  "verification": {
+    "commands": [
+      ["python", "-m", "unittest", "discover", "-s", "tests", "-v"]
+    ],
+    "environment": {},
+    "expected_app_id": null,
+    "material_inputs": [],
+    "required_check": "openharness / candidate"
+  }
+}
