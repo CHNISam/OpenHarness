@@ -12,6 +12,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      issues: read
     outputs:
       head: ${{ steps.check.outputs.head }}
       base: ${{ steps.check.outputs.base }}
@@ -55,6 +56,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      issues: read
       statuses: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
