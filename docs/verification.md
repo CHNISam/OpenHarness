@@ -32,6 +32,15 @@ Activation and protected managed transitions are blocked. Genesis single-writer
 applicability is a declared trusted envelope assumption, not an OS writer-count proof.
 Outside that envelope, exclusive authority/fencing requires an effective adapter.
 
-Candidate end-to-end verification is run separately after committing this implementation;
-the resulting diagnostic evidence resides in the Git common directory and cannot
-authorize GitHub integration. Remote integration remains unverified and unconfigured.
+Candidate end-to-end verification passed after committing implementation `fa047de`:
+`openharness verify --head HEAD --base main` tested the merged result tree in a native
+detached worktree. All 49 tests passed in that permitted execution context, including
+symlink rejection. The check exited 0, the subject remained unchanged, and the tool
+returned `passed: true`, `authorizes_integration: false`. The temporary worktree was
+removed. Diagnostic identity:
+`608ad77ed2199f818aa3348850ff1c772ab9d04553c655fefad3586fe3ca279a`.
+
+This record binds that specific candidate. Subsequent commits require fresh evidence;
+the CLI must reject the old record for the changed head. Current diagnostic evidence
+resides in the Git common directory and cannot authorize GitHub integration. Remote
+integration remains unverified and unconfigured.
