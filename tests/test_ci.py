@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from openharness.ci import candidate_context, docker_arguments, workflow_text, event_policy, publish
+from openharness.ci import candidate_context, docker_arguments, workflow_text, event_policy, publish, control_change, control_authorized
 from openharness.model import default_config, digest
 
 
@@ -50,6 +50,23 @@ class ControllerTests(unittest.TestCase):
         self.assertEqual('active', policy['enforcement'])
         self.assertEqual({}, policy['conditions'])
         self.assertEqual(['pull_request_target'], policy['rules'][0]['parameters']['allowed_events'])
+
+    def test_harness_self_upgrade_and_acceptance_sources_require_control_authority(self):
+        self.config['verification']['controller'] = {'repository': 'owner/repo', 'revision': 'a' * 40}
+        for path in ('openharness/native.py', 'openharness/ci.py', 'tests/test_ci.py', 'pyproject.toml', 'docs/contracts/frozen.md'):
+            self.assertTrue(control_change(self.config, [path]))
+        self.assertFalse(control_change(self.config, ['docs/results.md']))
+        self.config['verification']['controller']['repository'] = 'external/tool'
+        self.assertFalse(control_change(self.config, ['tests/test_product.py']))
+
+    def test_control_approval_is_exact_native_owner_head_and_base(self):
+        context = {'head': 'a' * 40, 'base': 'b' * 40, 'issue': 3}
+        comment = {'user': {'login': 'other'}, 'body': 'OpenHarness-Control-Approval: ' + 'a' * 40 + ' ' + 'b' * 40}
+        self.assertFalse(control_authorized(self.config, context, lambda _: [comment]))
+        comment['user']['login'] = 'owner'
+        self.assertTrue(control_authorized(self.config, context, lambda _: [comment]))
+        context['base'] = 'c' * 40
+        self.assertFalse(control_authorized(self.config, context, lambda _: [comment]))
 
     def test_publisher_rejects_old_head_and_accepts_only_matching_identity(self):
         event = {'pull_request': {'number': 7}}
