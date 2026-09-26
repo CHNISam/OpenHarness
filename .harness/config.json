@@ -26,11 +26,24 @@
   "target": "main",
   "verification": {
     "commands": [
-      ["python", "-m", "unittest", "discover", "-s", "tests", "-v"]
+      [
+        "python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests",
+        "-v"
+      ]
     ],
+    "controller": {
+      "repository": "CHNISam/OpenHarness",
+      "revision": "872742ceed1691940f2a3d17ac894634c461ce87"
+    },
     "environment": {},
-    "expected_app_id": null,
+    "expected_app_id": 15368,
     "material_inputs": [],
-    "required_check": "openharness / candidate"
+    "required_check": "openharness / candidate",
+    "sandbox_image": "python@sha256:227b6570d6ee07061ae6ca2eb04dedfb6d2b34045835f343065b9869e4d427ea"
   }
 }

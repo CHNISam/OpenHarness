@@ -1,0 +1,87 @@
+name: OpenHarness trusted controller
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+permissions: {}
+concurrency:
+  group: openharness-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      head: ${{ steps.check.outputs.head }}
+      base: ${{ steps.check.outputs.base }}
+      tree: ${{ steps.check.outputs.tree }}
+      identity: ${{ steps.check.outputs.identity }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          path: baseline
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.13'
+      - id: source
+        name: Read trusted immutable tool source
+        run: |
+          python -c 'import json,os; c=json.load(open("baseline/.harness/config.json")); s=c["verification"]["controller"]; f=open(os.environ["GITHUB_OUTPUT"],"a"); print("repository="+s["repository"],file=f); print("revision="+s["revision"],file=f)'
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: ${{ steps.source.outputs.repository }}
+          ref: ${{ steps.source.outputs.revision }}
+          path: tool
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: candidate
+          fetch-depth: 0
+          persist-credentials: false
+      - id: check
+        name: Verify actual candidate inside credential-free sandbox
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PYTHONPATH: ${{ github.workspace }}/tool
+        run: python -m openharness.ci verify --baseline baseline --candidate candidate
+  publish:
+    needs: verify
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      statuses: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          path: baseline
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.13'
+      - id: source
+        name: Read trusted immutable tool source
+        run: |
+          python -c 'import json,os; c=json.load(open("baseline/.harness/config.json")); s=c["verification"]["controller"]; f=open(os.environ["GITHUB_OUTPUT"],"a"); print("repository="+s["repository"],file=f); print("revision="+s["revision"],file=f)'
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: ${{ steps.source.outputs.repository }}
+          ref: ${{ steps.source.outputs.revision }}
+          path: tool
+          persist-credentials: false
+      - name: Publish only fresh trusted result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PYTHONPATH: ${{ github.workspace }}/tool
+          CANDIDATE_RESULT: ${{ needs.verify.result }}
+          CANDIDATE_HEAD: ${{ needs.verify.outputs.head }}
+          CANDIDATE_BASE: ${{ needs.verify.outputs.base }}
+          CANDIDATE_TREE: ${{ needs.verify.outputs.tree }}
+          CANDIDATE_IDENTITY: ${{ needs.verify.outputs.identity }}
+        run: python -m openharness.ci publish --baseline baseline
