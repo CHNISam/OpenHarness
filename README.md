@@ -89,6 +89,15 @@ acceptance semantics are trusted project inputs; review them before running comm
 Local execution uses the executor's existing permissions/sandbox. OpenHarness does
 not supply an additional process sandbox.
 
+## Agent skill
+
+The reusable [openharness skill](skills/openharness/SKILL.md) helps Codex enter an
+installed repository, follow its live lifecycle, and recover without bypassing
+authority. Copy `skills/openharness` into your Codex skills directory (normally
+`~/.codex/skills/openharness`) to make it discoverable across projects. The skill
+does not install or activate OpenHarness and is not a repository guarantee; use
+the project-local instructions and current `entry`/`doctor` results for authority.
+
 ## Supported execution envelope
 
 The default topology trusts one executor writer per workspace. Administrators and
