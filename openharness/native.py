@@ -59,6 +59,9 @@ def trusted(config, raw):
         return False
     if not any(w.get('path') == WORKFLOW_PATH and w.get('state') == 'active' for w in raw.get('workflows', {}).get('workflows', [])):
         return False
+    permissions = raw.get('workflows', {}).get('permissions', {})
+    if permissions.get('enabled') is not True or permissions.get('allowed_actions') != 'all':
+        return False
     policies = raw.get('actions_policies', [])
     def all_workflows(policy):
         conditions = policy.get('conditions')
@@ -76,6 +79,7 @@ def observe_controller(config, raw, api, errors):
     prefix = f'repos/{config["repository"]}'
     ref = raw.get('branch', {}).get('commit', {}).get('sha')
     try:
+        raw.setdefault('workflows', {})['permissions'] = api(f'{prefix}/actions/permissions')
         raw['canonical_config'] = json.loads(file_bytes(api, prefix, '.harness/config.json', ref))
         raw['controller_workflow'] = file_bytes(api, prefix, WORKFLOW_PATH, ref).decode('utf-8').replace('\r\n', '\n')
         source = f'repos/{controller["repository"]}'
