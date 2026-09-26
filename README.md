@@ -206,3 +206,21 @@ ownership/fencing remains required if competing writers enter scope. See
 GitHub source semantics: [rules and sourced checks](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets),
 [merge-group checks](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks),
 [rules REST API](https://docs.github.com/en/rest/repos/rules).
+
+## Current native validation
+
+See [live deployment record](docs/native-deployment-validation.md) and the canonical
+`.harness/deployment-proof.json`. The independently installed v0.2 tool has activated
+this repository's configured profile; `entry`/`doctor` must still revalidate its current
+state. There are no remaining bootstrap implementation todos for that profile.
+
+The conservative adapter requires repository Actions enabled with `allowed_actions:
+all`, one canonical trusted workflow and the native all-workflow event policy. Selected
+allowlists and competing/unknown workspace writers remain explicit unsupported scope
+until applicable adapters exist. Native publisher logs are part of proof: expiration
+or unavailability invalidates closure and requires fresh deployment proof.
+
+Harness self-upgrades also protect tool code, acceptance tests and frozen contracts
+when this repository hosts its producer. These changes retain exact owner authority
+and native integration; observer-only code is distinguished from executed producer
+dependencies. Local verifier code/runtime identity still invalidates stale activation.
