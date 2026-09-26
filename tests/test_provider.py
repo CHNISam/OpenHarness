@@ -116,6 +116,7 @@ class ProviderTests(unittest.TestCase):
             return substrate()['repository']
         before = GitHub(api).observe(self.config)
         registry.append({'path': '.github/workflows/forge.yml', 'state': 'active'})
+        registry[0].update(name='Candidate may rename its copy', updated_at='Later run registry metadata')
         after = GitHub(api).observe(self.config)
         self.assertEqual([], after['errors'])
         self.assertEqual(before['fingerprint'], after['fingerprint'])
