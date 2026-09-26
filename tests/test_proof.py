@@ -15,13 +15,17 @@ class ProofTests(unittest.TestCase):
         self.proof = {'schema': 1, 'repository': 'owner/repo', 'policy': 'policy', 'cases': {
             'valid': {'pr': 1, 'head': '1' * 40},
             'invalid': {'pr': 2, 'head': '2' * 40, 'rule_suite_id': 2},
-            'source-spoof': {'pr': 3, 'head': '3' * 40, 'rule_suite_id': 3},
+            'source-spoof': {'pr': 3, 'head': '3' * 40, 'rule_suite_id': 3, 'blocked_run': 9},
             'direct-update': {'head': '4' * 40, 'rule_suite_id': 4}}}
         self.run_event = 'pull_request_target'
         self.merged_tree = 'tree'
         self.denial = 'fail'
 
     def api(self, path):
+        if '/actions/runs/9/jobs' in path:
+            return {'total_count': 0, 'jobs': []}
+        if path.endswith('/actions/runs/9'):
+            return {'id': 9, 'head_sha': '3' * 40, 'event': 'push', 'conclusion': 'startup_failure'}
         if '/contents/' in path:
             value = self.proof if 'deployment-proof' in path else self.config
             content = workflow_text() if WORKFLOW_PATH in path else json.dumps(value)
