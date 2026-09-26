@@ -3,7 +3,7 @@ import unittest
 
 from openharness.ci import WORKFLOW_PATH, controller_blobs, event_policy, workflow_text
 from openharness.model import default_config
-from openharness.native import trusted
+from openharness.native import trusted, producer_blobs
 from openharness.provider import summarize
 from tests.test_provider import substrate
 
@@ -13,7 +13,7 @@ class NativeTests(unittest.TestCase):
         self.config = default_config('owner/repo', 'main')
         self.config['verification'].update(expected_app_id=42, controller={'repository': 'owner/tool', 'revision': 'a' * 40}, sandbox_image='python@sha256:' + 'a' * 64)
         self.raw = substrate()
-        self.raw.update(controller_workflow=workflow_text(), controller_blobs=controller_blobs(), actions_policies=[event_policy()], other_target_workflows=[], canonical_config=copy.deepcopy(self.config))
+        self.raw.update(controller_workflow=workflow_text(), controller_blobs=producer_blobs(), actions_policies=[event_policy()], other_target_workflows=[], canonical_config=copy.deepcopy(self.config))
         self.raw['workflows'] = {'workflows': [{'path': WORKFLOW_PATH, 'state': 'active'}]}
 
     def test_provenance_requires_real_native_inputs(self):

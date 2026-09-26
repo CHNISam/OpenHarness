@@ -3,10 +3,43 @@
 import base64
 import json
 import re
+import subprocess
 
 from .ci import WORKFLOW_PATH, controller_blobs, workflow_text
 from .model import digest
 from .provider import ProviderError
+
+
+def producer_blobs():
+    # Only code executed by `python -m openharness.ci` produces accepted evidence.
+    # Observer/CLI/recovery upgrades do not replace that immutable producer.
+    paths = {'openharness/__init__.py', 'openharness/ci.py', 'openharness/model.py',
+             'openharness/provider.py', 'openharness/repository.py'}
+    return {path: sha for path, sha in controller_blobs().items() if path in paths}
+
+
+def job_log(path):
+    try:
+        result = subprocess.run(['gh', 'api', path], capture_output=True, text=True, encoding='utf-8', timeout=45)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise ProviderError('Native publisher log unavailable') from exc
+    if result.returncode or len(result.stdout) > 2_000_000:
+        raise ProviderError('Native publisher log unavailable, expired or too large')
+    return result.stdout
+
+
+def executed_baseline(config, prefix, run, api, logs):
+    jobs = api(f'{prefix}/actions/runs/{int(run["id"])}/jobs?per_page=100')
+    if jobs.get('total_count') != len(jobs.get('jobs', [])):
+        raise ProviderError('Native job observation incomplete')
+    publishers = [job for job in jobs['jobs'] if job.get('name') == 'publish' and job.get('status') == 'completed' and job.get('conclusion') == 'success']
+    if len(publishers) != 1:
+        raise ProviderError('Completed trusted publisher job missing')
+    text = logs(f'{prefix}/actions/jobs/{int(publishers[0]["id"])}/logs')
+    refs = re.findall(r'^\S+[ \t]+ref: ([0-9a-f]{40})[ \t]*\r?$', text, re.MULTILINE)
+    if len(refs) != 2 or refs[1] != config['verification']['controller']['revision']:
+        raise ProviderError('Executed publisher baseline/source identity unavailable')
+    return refs[0]
 
 
 def file_bytes(api, prefix, path, ref):
@@ -22,7 +55,7 @@ def trusted(config, raw):
         return False
     if raw.get('controller_workflow') != workflow_text():
         return False
-    if raw.get('controller_blobs') != controller_blobs():
+    if raw.get('controller_blobs') != producer_blobs():
         return False
     if not any(w.get('path') == WORKFLOW_PATH and w.get('state') == 'active' for w in raw.get('workflows', {}).get('workflows', [])):
         return False
@@ -49,7 +82,7 @@ def observe_controller(config, raw, api, errors):
         tree = api(f'{source}/git/trees/{controller["revision"]}?recursive=1')
         if tree.get('truncated'):
             raise ProviderError('Immutable source tree is truncated')
-        expected = controller_blobs()
+        expected = producer_blobs()
         raw['controller_blobs'] = {item['path']: item['sha'] for item in tree.get('tree', []) if item.get('path') in expected and item.get('mode') == '100644'}
         listing = api(f'{prefix}/actions/policies?per_page=100')
         if listing.get('total_count', 0) > len(listing.get('policies', [])):
@@ -66,7 +99,7 @@ def observe_controller(config, raw, api, errors):
         errors.append(f'trusted controller: {exc}')
 
 
-def observe_proof(config, observation, api):
+def observe_proof(config, observation, api, logs=job_log):
     if not observation.get('gate') or not observation.get('trusted_controller'):
         return {'valid': False, 'reason': 'Native enforcement/provenance not currently established'}
     prefix = f'repos/{config["repository"]}'
@@ -101,8 +134,9 @@ def observe_proof(config, observation, api):
             run = api(f'{prefix}/actions/runs/{match[1]}')
             if run.get('event') != 'pull_request_target' or run.get('path') != WORKFLOW_PATH or run.get('status') != 'completed':
                 raise ProviderError('Proof did not use the trusted authoritative path')
-            subjects = [item for item in run.get('pull_requests', []) if item.get('number') == pull['number'] and item.get('head', {}).get('sha') == sha]
-            baseline = subjects[0].get('base', {}).get('sha') if len(subjects) == 1 else None
+            if run.get('head_sha') != sha:
+                raise ProviderError('Native run subject differs from proof candidate')
+            baseline = executed_baseline(config, prefix, run, api, logs)
             if not baseline or file_bytes(api, prefix, WORKFLOW_PATH, baseline).decode('utf-8').replace('\r\n', '\n') != workflow_text() or json.loads(file_bytes(api, prefix, '.harness/config.json', baseline)) != config:
                 raise ProviderError('Historical proof controller/config differs from current trusted substrate')
             if name == 'valid':
