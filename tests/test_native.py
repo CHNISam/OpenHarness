@@ -26,6 +26,10 @@ class NativeTests(unittest.TestCase):
         self.raw['actions_policies'][0]['enforcement'] = 'evaluate'
         self.assertFalse(trusted(self.config, self.raw))
 
+    def test_native_all_workflows_normalization_is_equivalent(self):
+        self.raw['actions_policies'][0]['conditions'] = {'workflow_path': {'include': ['~ALL'], 'exclude': []}}
+        self.assertTrue(trusted(self.config, self.raw))
+
     def test_policy_excluded_workflow_keeps_bypass_open(self):
         self.raw['actions_policies'][0]['conditions'] = {'workflow_path': {'exclude': ['forge.yml']}}
         self.assertFalse(trusted(self.config, self.raw))

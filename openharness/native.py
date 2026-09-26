@@ -25,7 +25,10 @@ def trusted(config, raw):
     if raw.get('controller_blobs') != controller_blobs():
         return False
     policies = raw.get('actions_policies', [])
-    policy = any(p.get('enforcement') == 'active' and not p.get('conditions') and any(
+    def all_workflows(policy):
+        conditions = policy.get('conditions')
+        return not conditions or conditions == {'workflow_path': {'include': ['~ALL'], 'exclude': []}} or conditions == {'workflow_path': {'include': [], 'exclude': []}}
+    policy = any(p.get('enforcement') == 'active' and all_workflows(p) and any(
         r.get('type') == 'restrict_action_events' and r.get('parameters', {}).get('allowed_events') == ['pull_request_target']
         for r in p.get('rules', [])) for p in policies)
     return policy and raw.get('other_target_workflows') == [] and raw.get('canonical_config') == config
@@ -100,7 +103,8 @@ def observe_proof(config, observation, api):
             run = api(f'{prefix}/actions/runs/{match[1]}')
             if run.get('event') != 'pull_request_target' or run.get('path') != WORKFLOW_PATH or run.get('status') != 'completed':
                 raise ProviderError('Proof did not use the trusted authoritative path')
-            baseline = run.get('head_sha')
+            subjects = [item for item in run.get('pull_requests', []) if item.get('number') == pull['number'] and item.get('head', {}).get('sha') == sha]
+            baseline = subjects[0].get('base', {}).get('sha') if len(subjects) == 1 else None
             if not baseline or file_bytes(api, prefix, WORKFLOW_PATH, baseline).decode('utf-8').replace('\r\n', '\n') != workflow_text() or json.loads(file_bytes(api, prefix, '.harness/config.json', baseline)) != config:
                 raise ProviderError('Historical proof controller/config differs from current trusted substrate')
             if name == 'valid':

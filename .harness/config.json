@@ -38,7 +38,7 @@
     ],
     "controller": {
       "repository": "CHNISam/OpenHarness",
-      "revision": "872742ceed1691940f2a3d17ac894634c461ce87"
+      "revision": "929c97beecd5f61da36f1626a1c452825e3f1d00"
     },
     "environment": {},
     "expected_app_id": 15368,
