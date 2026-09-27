@@ -222,7 +222,15 @@ def observe_work_proof(config, proof, api, logs):
         if len(failed) != 1 or not re.search(r'^\S+[ \t]+ValueError: ' + re.escape(reason) + r'[ \t]*\r?$', failure_log, re.MULTILINE):
             raise ProviderError('Native Backlog rejection reason unavailable')
         denied = api(f'{prefix}/rulesets/rule-suites/{int(case["rule_suite_id"])}')
-        if denied.get('result') != 'fail' or denied.get('after_sha') != sha or denied.get('ref') != f'refs/heads/{config["target"]}':
+        subject_matches = denied.get('after_sha') == sha
+        if not subject_matches and re.fullmatch(r'[0-9a-f]{40}', denied.get('after_sha', '')):
+            # Native PR merge rejection records the proposed merge, not its HEAD.
+            # Bind both parents to the trusted run's canonical base and candidate.
+            proposed = api(f'{prefix}/git/commits/{denied["after_sha"]}')
+            subject_matches = (denied.get('before_sha') == baseline
+                               and proposed.get('sha') == denied['after_sha']
+                               and [parent.get('sha') for parent in proposed.get('parents', [])] == [baseline, sha])
+        if denied.get('result') != 'fail' or not subject_matches or denied.get('ref') != f'refs/heads/{config["target"]}':
             raise ProviderError('Backlog invalid integration denial unavailable')
         if name == 'stale-work':
             accepted = api(f'{prefix}/actions/runs/{int(case["accepted_run"])}')

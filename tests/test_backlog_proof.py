@@ -89,6 +89,33 @@ class BacklogProofTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     observe_work_proof(self.config, self.proof, self.api, self.logs)
 
+    def test_native_merge_denial_binds_both_parents_and_canonical_base(self):
+        for mutation in (None, 'head', 'base', 'before', 'extra-parent'):
+            with self.subTest(mutation=mutation):
+                def api(path):
+                    if '/rule-suites/' in path:
+                        return {'result': 'fail', 'after_sha': 'd' * 40,
+                                'before_sha': ('e' if mutation == 'before' else 'b') * 40,
+                                'ref': 'refs/heads/main'}
+                    if '/git/commits/' in path:
+                        parents = [('e' if mutation == 'base' else 'b') * 40,
+                                   ('e' if mutation == 'head' else str(current[0])) * 40]
+                        if mutation == 'extra-parent':
+                            parents.append('e' * 40)
+                        return {'sha': 'd' * 40, 'parents': [{'sha': sha} for sha in parents]}
+                    return self.api(path)
+                # Each case has a different immutable candidate; observe separately.
+                current = [1]
+                def routed(path):
+                    if '/rule-suites/' in path:
+                        current[0] = int(path.rsplit('/', 1)[1])
+                    return api(path)
+                if mutation is None:
+                    self.assertEqual(5, len(observe_work_proof(self.config, self.proof, routed, self.logs)))
+                else:
+                    with self.assertRaises(ValueError):
+                        observe_work_proof(self.config, self.proof, routed, self.logs)
+
 
 if __name__ == '__main__':
     unittest.main()
