@@ -89,6 +89,11 @@ acceptance semantics are trusted project inputs; review them before running comm
 Local execution uses the executor's existing permissions/sandbox. OpenHarness does
 not supply an additional process sandbox.
 
+Dependencies must also be available in the clean candidate environment. See the
+[locked dependency recipe](docs/offline-dependencies.md) for reviewed immutable
+project images, offline scratch execution, import resolution and local diagnostics.
+Ignored source dependencies are not copied into candidates.
+
 ## Agent skill
 
 The reusable [openharness skill](skills/openharness/SKILL.md) helps Codex enter an
