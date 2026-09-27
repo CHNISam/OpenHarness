@@ -133,3 +133,7 @@ integration rule suite. Stale-work proof includes a prior successful native run,
 canonical descendant revision with revoked assignment and rejected renewed integration.
 Candidate output cannot substitute for the trusted verifier's rejection exception.
 Missing/unavailable/expired evidence blocks coverage and activation.
+
+See [the native validation record](backlog-native-validation.md) for the bounded
+synthetic rollout, immutable subjects, rejected cases and Managed exit proof.
+It is historical evidence; live `doctor` remains the activation authority.
