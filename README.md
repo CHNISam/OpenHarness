@@ -216,6 +216,14 @@ the non-destructive installer under applicable governance and invalidates affect
 activation. Exact generated v0.1 artifacts can migrate to the current compiler;
 custom artifact conflicts are preserved and require an explicit implementation delta.
 
+When `workspace` or `preflight` rejects current closure, its JSON error includes
+`diagnostics` from that exact Doctor observation: observation time, provider errors,
+native gate/controller state, deployment-proof result, guarantee gaps, readiness and
+saved/current substrate identities. A later successful Doctor is a new observation,
+not proof that the rejected transition was legal. Readiness with an activation mismatch
+requires revalidation and explicit activation; unavailable observations or proof must
+be resolved before retrying. The rejection does not create a binding or relax a gate.
+
 ## Verification and remaining delta
 
 ```sh

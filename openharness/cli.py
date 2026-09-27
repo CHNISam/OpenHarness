@@ -87,7 +87,10 @@ def main(argv=None):
         print(json_text(result), end='')
         return exit_code
     except (ValueError, OSError, subprocess.SubprocessError, KeyError, TypeError) as exc:
-        print(json_text({'error': str(exc), 'command': args.command, 'closure': False}), file=sys.stderr, end='')
+        result = {'error': str(exc), 'command': args.command, 'closure': False}
+        if hasattr(exc, 'diagnostics'):
+            result['diagnostics'] = exc.diagnostics
+        print(json_text(result), file=sys.stderr, end='')
         return 1
 
 

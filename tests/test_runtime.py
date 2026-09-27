@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from openharness.model import digest
 from openharness.repository import Repository, bootstrap, json_text
-from openharness.runtime import Runtime
+from openharness.runtime import ClosureError, Runtime
 from tests.helpers import git, make_repo
 
 
@@ -122,6 +122,37 @@ class RuntimeTests(unittest.TestCase):
     def test_genesis_cannot_claim_established_repository_guarantees(self):
         report = self.runtime.doctor()
         self.assertFalse(any(g['status'] == 'ESTABLISHED' for g in report['guarantees']))
+
+    def test_workspace_rejection_preserves_blocking_observation_without_reobserving(self):
+        self.runtime.save_state({'lifecycle': 'MANAGED', 'substrate': 'old', 'events': []})
+        report = self.runtime.doctor()
+        report['provider'].update(errors=['rules: temporary API failure'],
+                                  deployment_proof={'valid': False, 'reason': 'Native publisher log unavailable'})
+        with patch.object(self.runtime, 'doctor', return_value=report) as observe:
+            with patch.object(self.provider, 'work') as work:
+                with self.assertRaises(ClosureError) as rejected:
+                    self.runtime.workspace(1, 'blocked')
+        observe.assert_called_once_with()
+        work.assert_not_called()
+        diagnostic = rejected.exception.diagnostics
+        self.assertEqual(['rules: temporary API failure'], diagnostic['provider']['errors'])
+        self.assertEqual('Native publisher log unavailable', diagnostic['provider']['deployment_proof']['reason'])
+        self.assertFalse(diagnostic['activation_matches'])
+        self.assertEqual(report['observed_at'], diagnostic['observed_at'])
+        self.assertEqual({}, self.runtime.state().get('workspaces', {}))
+
+    def test_preflight_reports_activation_drift_and_readiness_separately(self):
+        self.runtime.save_state({'lifecycle': 'MANAGED', 'substrate': 'old', 'events': []})
+        report = self.runtime.doctor()
+        report['readiness']['closure'] = True
+        with patch.object(self.runtime, 'doctor', return_value=report):
+            with self.assertRaises(ClosureError) as rejected:
+                self.runtime.preflight()
+        diagnostic = rejected.exception.diagnostics
+        self.assertTrue(diagnostic['readiness'])
+        self.assertFalse(diagnostic['activation_matches'])
+        self.assertEqual('old', diagnostic['activation_substrate'])
+        self.assertEqual(report['substrate'], diagnostic['observed_substrate'])
 
     def test_corrupt_runtime_can_be_repaired_without_working_harness_config(self):
         self.runtime.storage.mkdir(parents=True, exist_ok=True)

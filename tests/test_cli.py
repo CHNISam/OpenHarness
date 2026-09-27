@@ -4,6 +4,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from tests.helpers import git, make_repo
@@ -25,6 +26,23 @@ class CLITests(unittest.TestCase):
         self.assertEqual('GENESIS', json.loads(result.stdout)['lifecycle'])
         again = self.run_cli('bootstrap')
         self.assertEqual([], json.loads(again.stdout)['changed'])
+
+    def test_closure_rejection_emits_same_observation_diagnostics(self):
+        import io
+        from contextlib import redirect_stderr
+        from openharness.cli import main
+        from openharness.runtime import ClosureError
+        report = {'provider': {'errors': ['provider unavailable']}, 'substrate': 'new',
+                  'readiness': {'closure': False}, 'guarantees': [], 'observed_at': 'exact-observation'}
+        error = ClosureError('blocked', report, {'lifecycle': 'MANAGED', 'substrate': 'old'})
+        stream = io.StringIO()
+        with patch('openharness.cli.Runtime.workspace', side_effect=error), redirect_stderr(stream):
+            code = main(['--repo', str(self.root), 'workspace', '--issue', '1', '--change', 'fix'])
+        payload = json.loads(stream.getvalue())
+        self.assertEqual(1, code)
+        self.assertFalse(payload['closure'])
+        self.assertEqual('exact-observation', payload['diagnostics']['observed_at'])
+        self.assertEqual(['provider unavailable'], payload['diagnostics']['provider']['errors'])
 
     def test_no_user_acceptance_commands_means_verification_is_blocked(self):
         self.run_cli('bootstrap')
