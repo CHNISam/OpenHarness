@@ -27,6 +27,20 @@ class CLITests(unittest.TestCase):
         again = self.run_cli('bootstrap')
         self.assertEqual([], json.loads(again.stdout)['changed'])
 
+    def test_unicode_diagnostics_survive_legacy_console_encoding(self):
+        for failed in (False, True):
+            with self.subTest(failed=failed):
+                behavior = "side_effect=ValueError('测试诊断')" if failed else "return_value={'closure': True, 'path': '测试路径'}"
+                script = ("from unittest.mock import patch\nfrom openharness.cli import main\n"
+                          f"with patch('openharness.cli.Runtime.doctor', {behavior}):\n"
+                          f"    raise SystemExit(main(['--repo', {str(self.root)!r}, 'doctor']))\n")
+                result = subprocess.run([sys.executable, '-c', script], capture_output=True,
+                                        env={**os.environ, 'PYTHONIOENCODING': 'cp1252'},
+                                        text=True, encoding='utf-8')
+                self.assertEqual(1 if failed else 0, result.returncode, result.stderr)
+                payload = json.loads(result.stderr if failed else result.stdout)
+                self.assertEqual('测试诊断' if failed else '测试路径', payload['error' if failed else 'path'])
+
     def test_closure_rejection_emits_same_observation_diagnostics(self):
         import io
         from contextlib import redirect_stderr

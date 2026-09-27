@@ -83,3 +83,17 @@ or availability promises; fresh mutable reads and final target re-observation re
 Current readiness/activation comes only from live `entry`/`doctor`, never this saved
 record. Existing multi-workflow, competing-writer and log-retention limits remain;
 one successful deployment does not establish broad or long-term production maturity.
+
+## Windows terminal follow-up
+
+Final neutral-directory usage exposed a CLI-only output defect: a legacy Windows
+charmap could not print Unicode in an otherwise valid live Doctor report. Issue #36
+was reopened rather than treating the output failure as a successful final audit.
+Both JSON output streams now explicitly use UTF-8, while in-process StringIO callers
+remain supported. A fresh-process regression forces `PYTHONIOENCODING=cp1252` and
+checks successful Unicode diagnostics and Unicode errors. This repair changes no
+executed trusted producer dependency, native policy, proof reference or source pin.
+The full follow-up suite passed all 162 cases in 128.642 seconds, with no skips;
+compileall and diff checks passed.
+An independently installed observer update still requires explicit activation
+because its local execution identity changes.
