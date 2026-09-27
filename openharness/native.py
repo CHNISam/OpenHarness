@@ -1,20 +1,20 @@
 """Observe actual native provenance and deployment proof, never self-attested flags."""
 
-import base64
 import json
 import re
 import subprocess
 
 from .ci import WORKFLOW_PATH, controller_blobs, workflow_text
 from .model import digest
-from .provider import ProviderError
+from .provider import ProviderError, file_bytes
 
 
 def producer_blobs():
     # Only code executed by `python -m openharness.ci` produces accepted evidence.
     # Observer/CLI/recovery upgrades do not replace that immutable producer.
     paths = {'openharness/__init__.py', 'openharness/ci.py', 'openharness/model.py',
-             'openharness/provider.py', 'openharness/repository.py', 'openharness/backlog.py'}
+             'openharness/provider.py', 'openharness/repository.py',
+             'openharness/backlog.py', 'openharness/updates.py'}
     return {path: sha for path, sha in controller_blobs().items() if path in paths}
 
 
@@ -40,13 +40,6 @@ def executed_baseline(config, prefix, run, api, logs):
     if len(refs) != 2 or refs[1] != config['verification']['controller']['revision']:
         raise ProviderError('Executed publisher baseline/source identity unavailable')
     return refs[0]
-
-
-def file_bytes(api, prefix, path, ref):
-    data = api(f'{prefix}/contents/{path}?ref={ref}')
-    if not isinstance(data, dict) or data.get('type') != 'file' or data.get('encoding') != 'base64':
-        raise ProviderError(f'Authoritative file unavailable: {path}')
-    return base64.b64decode(data['content'])
 
 
 def trusted(config, raw):

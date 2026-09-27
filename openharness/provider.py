@@ -1,5 +1,6 @@
 """Read-only native GitHub observation. Unobservable is never equivalent to absent."""
 
+import base64
 import json
 import subprocess
 from urllib.parse import quote
@@ -39,6 +40,13 @@ def gh_api(path):
         return json.loads(result.stdout)
     except json.JSONDecodeError as exc:
         raise ProviderError(f'{path}: invalid JSON response') from exc
+
+
+def file_bytes(api, prefix, path, ref):
+    data = api(f'{prefix}/contents/{path}?ref={ref}')
+    if not isinstance(data, dict) or data.get('type') != 'file' or data.get('encoding') != 'base64':
+        raise ProviderError(f'Authoritative file unavailable: {path}')
+    return base64.b64decode(data['content'])
 
 
 class GitHub:

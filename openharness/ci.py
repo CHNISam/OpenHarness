@@ -251,6 +251,8 @@ def check_candidate(config, baseline, root, event, api=gh_api):
         if proposed['repository'] != config['repository'] or proposed['target'] != config['target']:
             raise ValueError('Control upgrade cannot silently move semantic authority')
         configurations.append(proposed)
+    from .updates import validate_candidate
+    validate_candidate(repo, context['base'], api)
     checks = []
     for selected in configurations:
         verification = selected['verification']

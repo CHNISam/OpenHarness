@@ -134,7 +134,18 @@ class Repository:
         entry = safe_path(self.root, '.harness/AGENT.md')
         agents = safe_path(self.root, 'AGENTS.md')
         installed = all(controls.values()) and entry.read_text(encoding='utf-8') == entry_text(self.config()) and MARKER in agents.read_text(encoding='utf-8')
-        return {'installed': installed, 'git': True, 'clean': not bool(self.git('status', '--porcelain')), 'controls': digest(controls)}
+        from .updates import installation_observation
+        try:
+            installation = installation_observation(self)
+            installation_error = None
+        except (ValueError, KeyError, TypeError) as exc:
+            installation, installation_error = None, str(exc)
+            installed = False
+        result = {'installed': installed, 'git': True, 'clean': not bool(self.git('status', '--porcelain')), 'controls': digest(controls)}
+        # Preserve legacy substrate identity until explicit enrollment.
+        if installation is not None or installation_error:
+            result.update(installation=installation, installation_error=installation_error)
+        return result
 
     def identity(self):
         url = self.git('remote', 'get-url', 'origin')

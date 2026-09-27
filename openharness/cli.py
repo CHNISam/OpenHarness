@@ -26,12 +26,14 @@ def parser():
         ('activate', 'Require complete live closure before entering managed operation'),
         ('preflight', 'Reject invalid protected transition'),
         ('reconcile', 'Observe authoritative state and invalidate stale local projections'),
-        ('upgrade', 'Stage installer upgrade through applicable lifecycle governance'),
         ('setup-plan', 'Emit reviewable remote setup proposal without applying it'),
         ('setup-apply', 'Install resolved native policy in Genesis without activating'),
         ('release', 'Release an integrated binding while preserving worktree and Issue'),
     ):
         commands.add_parser(name, help=help_text)
+    upgrade = commands.add_parser('upgrade', help='Stage governed artifacts or an immutable release migration')
+    upgrade.add_argument('--release', help='Exact stable SemVer; never a runtime ref')
+    upgrade.add_argument('--enroll', action='store_true', help='Record the already pinned immutable release')
     integrate = commands.add_parser('integrate', help='Integrate exact bound candidate through native protected PR merge')
     integrate.add_argument('--pr', type=int, required=True)
     handoff = commands.add_parser('handoff', help='Record continuity in the existing isolated workspace')
@@ -64,6 +66,10 @@ def main(argv=None):
             result = bootstrap(repo, args.repository, args.target, profile=args.profile, work=work)
         elif args.command == 'break-glass':
             result = runtime.break_glass(args.reason)
+        elif args.command == 'upgrade':
+            if args.enroll and not args.release:
+                raise ValueError('--enroll requires --release')
+            result = runtime.upgrade(args.release, args.enroll)
         elif args.command == 'integrate':
             result = runtime.integrate(args.pr)
         elif args.command == 'handoff':
