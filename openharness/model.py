@@ -42,15 +42,22 @@ def default_config(repository, target):
 
 def validate_config(config):
     expected = {'schema', 'profile', 'repository', 'target', 'authorities', 'envelope', 'verification'}
+    if isinstance(config, dict) and config.get('profile') == 'github-backlog-v1':
+        expected.add('work')
     if not isinstance(config, dict) or set(config) != expected:
         raise ValueError('Configuration must contain the exact supported fields; guarantee omission/overrides are forbidden')
-    if config['schema'] != 1 or config['profile'] != 'github-pr-v1':
+    if config['schema'] != 1 or config['profile'] not in ('github-pr-v1', 'github-backlog-v1'):
         raise ValueError('Unsupported schema or profile')
     if not isinstance(config['repository'], str) or not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', config['repository']):
         raise ValueError('Expected GitHub owner/repository')
     if not isinstance(config['target'], str) or not re.fullmatch(r'[A-Za-z0-9_./-]+', config['target']) or config['target'].startswith('-') or '..' in config['target']:
         raise ValueError('Invalid target branch')
-    if config['authorities'] != AUTHORITIES:
+    authorities = dict(AUTHORITIES)
+    if config['profile'] == 'github-backlog-v1':
+        from .backlog import validate_work
+        validate_work(config['work'])
+        authorities['work'] = 'repository-backlog'
+    if config['authorities'] != authorities:
         raise ValueError('Each semantic state must have exactly the supported effective authority')
     envelope = config['envelope']
     if not isinstance(envelope, dict) or set(envelope) != {'workspace_writers', 'trusted_actors', 'excluded_transitions'}:
