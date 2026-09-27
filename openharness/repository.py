@@ -7,7 +7,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from .model import default_config, digest, validate_config
+from .model import mode, default_config, digest, validate_config
 
 ENTRY = '''# OpenHarness entry
 
@@ -68,7 +68,20 @@ saved reports and conversations are not activation authority.
 '''
 
 
+COOPERATIVE_ENTRY = '''# OpenHarness entry
+
+Read project instructions and run `openharness --repo . entry` for a short local
+orientation. Keep the project's existing work authority, acceptance and CI.
+Use an isolated workspace, verify the exact candidate and integrate its PR through
+the reviewed project path. No activation is required for cooperative operations.
+Administrators and writers can bypass these client checks; server enforcement and
+complete closure are not claimed. `doctor` is an explicit full audit.
+'''
+
+
 def entry_text(config):
+    if mode(config) == 'cooperative':
+        return COOPERATIVE_ENTRY
     return BACKLOG_ENTRY if config['profile'] == 'github-backlog-v1' else ENTRY
 WORKFLOW = '''# REVIEW TEMPLATE ONLY: candidate-controlled workflow is not trusted provenance.
 # Install a pinned verifier through provider-enforced candidate-independent wiring.
@@ -200,7 +213,7 @@ class Repository:
         return {'work_item': issue, 'change': change, 'branch': branch, 'path': str(path), 'base': sha, 'protected_scope': f'change:{branch}'}
 
 
-def bootstrap(repo, repository=None, target='main', governed_upgrade=False, profile=None, work=None):
+def bootstrap(repo, repository=None, target='main', governed_upgrade=False, profile=None, work=None, mode=None):
     runtime = safe_path(repo.common_dir, 'openharness/runtime.json')
     if runtime.exists() and not governed_upgrade:
         try:
@@ -215,6 +228,8 @@ def bootstrap(repo, repository=None, target='main', governed_upgrade=False, prof
     config = default_config(repository, target)
     if safe_path(repo.root, '.harness/config.json').exists():
         config = repo.config()
+        if mode is not None and mode != config.get('mode', 'strict'):
+            raise ValueError('Bootstrap cannot reconfigure installed execution mode; review the configuration change through project governance')
         if (profile is not None and profile != config['profile']) or (work is not None and work != config.get('work')):
             raise ValueError('Bootstrap cannot reconfigure installed authority; use reviewed upgrade')
     elif profile is not None:
@@ -224,15 +239,23 @@ def bootstrap(repo, repository=None, target='main', governed_upgrade=False, prof
             config['work'] = work
         elif work is not None:
             raise ValueError('Work configuration is only supported by the Backlog profile')
+    if not safe_path(repo.root, '.harness/config.json').exists() and mode is not None:
+        config['mode'] = mode
     validate_config(config)
     from .ci import workflow_text
     plans = {
         '.harness/config.json': json_text(config), '.harness/AGENT.md': entry_text(config),
         '.harness/github-workflow.yml.template': workflow_text(),
     }
+    cooperative = config.get('mode') == 'cooperative'
+    if cooperative:
+        plans.pop('.harness/github-workflow.yml.template')
+        # Existing instructions are project-owned, never compiler-owned by inference.
+        if safe_path(repo.root, '.harness/AGENT.md').exists():
+            plans.pop('.harness/AGENT.md')
     agents_path = safe_path(repo.root, 'AGENTS.md')
     agents = agents_path.read_text(encoding='utf-8') if agents_path.exists() else ''
-    if MARKER not in agents:
+    if MARKER not in agents and not (cooperative and agents_path.exists()):
         plans['AGENTS.md'] = agents + INSTRUCTION
     changes = []
     for relative, content in plans.items():
@@ -269,4 +292,7 @@ def bootstrap(repo, repository=None, target='main', governed_upgrade=False, prof
             else:
                 path.write_bytes(previous)
         raise
+    if cooperative:
+        return {'lifecycle': 'GENESIS', 'mode': 'cooperative', 'changed': [str(p.relative_to(repo.root)) for p, _ in changes],
+                'activated': False, 'next': 'Keep project workflow; configure existing acceptance/check/workflow, commit and review config'}
     return {'lifecycle': 'GENESIS', 'changed': [str(p.relative_to(repo.root)) for p, _ in changes], 'activation': 'Run live doctor; no automatic activation', 'ci': 'Staged .harness/github-workflow.yml.template; not yet wired or trusted'}

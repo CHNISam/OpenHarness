@@ -9,10 +9,11 @@ import subprocess
 import sys
 import uuid
 from contextlib import contextmanager
+from pathlib import Path
 from datetime import datetime, timezone
 
 from . import __version__
-from .model import CATALOGUE, candidate_id, digest, evaluate
+from .model import CATALOGUE, candidate_id, digest, evaluate, mode, validate_config
 from .provider import GitHub, ProviderError
 from .repository import Repository, bootstrap, json_text, safe_path
 
@@ -132,6 +133,8 @@ class Runtime:
         return report
 
     def activate(self):
+        if mode(self.repo.config()) != 'strict':
+            raise ValueError('Managed activation requires explicit strict configuration and complete live proof')
         with self.locked():
             report = self.doctor(revalidate=True)
             if report['provider'].get('source') != 'live-github-api' or not report['closure']:
@@ -144,6 +147,8 @@ class Runtime:
             return state
 
     def preflight(self):
+        if mode(self.repo.config()) == 'cooperative':
+            return self.cooperative_preflight()
         report = self.doctor()
         state = self.state()
         if state['lifecycle'] != 'MANAGED' or not report['closure'] or state.get('substrate') != report['substrate']:
@@ -165,19 +170,59 @@ class Runtime:
             raise ValueError('Workspace authority binding invalidated by configuration change')
         return {'allowed': True, 'workspace': binding, 'substrate': report['substrate']}
 
-    def workspace(self, issue, change, genesis=False):
+    def canonical_config(self, config, sha):
+        canonical = validate_config(json.loads(self.repo.git('show', f'{sha}:.harness/config.json')))
+        if canonical != config:
+            raise ValueError('Configuration differs from canonical project authority; review and merge it first')
+
+    def cooperative_preflight(self):
+        config, state = self.repo.config(), self.state()
+        if state['lifecycle'] == 'BREAK_GLASS':
+            raise ValueError('Explicit break-glass state requires recovery; no automatic fallback')
+        if config['envelope']['workspace_writers'] != 'single' or 'local-executor' not in config['envelope']['trusted_actors']:
+            raise ValueError('Cooperative operations require the declared trusted single workspace writer')
+        if self.repo.identity().lower() != config['repository'].lower():
+            raise ValueError('Origin authority does not match installed configuration')
+        branch = self.repo.git('branch', '--show-current')
+        binding = state.get('workspaces', {}).get(str(self.repo.root))
+        if (not binding or binding['branch'] != branch or branch == config['target'] or
+                binding.get('invalidated') or binding.get('config') != digest(config)):
+            raise ValueError('Cooperative transition requires a current bound isolated workspace')
+        if not (self.repo.root / '.git').is_file() or str(self.repo.root) not in {str(Path(w['path']).resolve()) for w in self._worktrees()}:
+            raise ValueError('Workspace is no longer registered and isolated')
+        target = self.provider.target(config)
+        self.canonical_config(config, target)
+        work = (self.provider.project_work(self.repo, config, binding['work_item'], target)
+                if hasattr(self.provider, 'project_work') else self.provider.work(config, binding['work_item']))
+        if config['profile'] == 'github-backlog-v1' and (binding.get('work_identity') != work['identity'] or binding.get('actor') != work['actor']):
+            raise ValueError('Backlog workspace authority invalidated by canonical work/assignment drift')
+        return {'allowed': True, 'workspace': binding, 'work': work, 'target': target, 'mode': 'cooperative', 'closure': False}
+
+    def workspace(self, issue, change, genesis=False, bind=False):
         with self.locked():
             config = self.repo.config()
             state = self.state()
+            cooperative = mode(config) == 'cooperative'
+            project_item = issue
+            if bind and not cooperative:
+                raise ValueError('Binding a project worktree requires explicit cooperative mode')
+            if cooperative and state['lifecycle'] == 'BREAK_GLASS':
+                raise ValueError('Explicit break-glass state requires recovery')
             if genesis:
                 if state['lifecycle'] != 'GENESIS':
                     raise ValueError('Genesis installer authority is unavailable after managed/exceptional operation')
-            else:
+            elif not cooperative:
                 report = self.doctor()
                 if state['lifecycle'] != 'MANAGED' or not report['closure'] or state.get('substrate') != report['substrate']:
                     raise ClosureError('Workspace creation requires current managed closure; use explicit --genesis only during bootstrap', report, state)
-            work = self.provider.work(config, issue)
-            observation = self.provider.observe(config)
+            if cooperative:
+                sha = self.provider.target(config)
+                work = (self.provider.project_work(self.repo, config, issue, sha)
+                        if hasattr(self.provider, 'project_work') else self.provider.work(config, issue))
+                observation = {'target_sha': sha, 'errors': []}
+            else:
+                work = self.provider.work(config, issue)
+                observation = self.provider.observe(config)
             if observation.get('errors') or not observation.get('target_sha'):
                 raise ValueError('Cannot bind workspace without observable live target revision')
             sha = observation['target_sha']
@@ -189,7 +234,29 @@ class Runtime:
             except ValueError:
                 self.repo.git('fetch', '--no-tags', 'origin', config['target'])
                 self.repo.revision(sha)
-            binding = self.repo.workspace(issue, change, sha)
+            if cooperative:
+                self.canonical_config(config, sha)
+                if self.repo.identity().lower() != config['repository'].lower():
+                    raise ValueError('Origin authority does not match installed configuration')
+                if config['envelope']['workspace_writers'] != 'single' or 'local-executor' not in config['envelope']['trusted_actors']:
+                    raise ValueError('Cooperative work requires one trusted workspace writer')
+            if bind:
+                from pathlib import Path
+                branch = self.repo.git('branch', '--show-current')
+                registered = {str(Path(w['path']).resolve()) for w in self._worktrees()}
+                if (not (self.repo.root / '.git').is_file() or str(self.repo.root) not in registered or
+                        not branch or branch == config['target'] or self.repo.git('status', '--porcelain')):
+                    raise ValueError('Bind requires a clean registered linked project worktree')
+                self.repo.git('merge-base', '--is-ancestor', sha, 'HEAD')
+                issue = work['id'] if config['profile'] == 'github-backlog-v1' else work['number']
+                binding = {'work_item': issue, 'change': change, 'branch': branch, 'path': str(self.repo.root), 'base': sha}
+            else:
+                binding = self.repo.workspace(issue, change, sha)
+            if cooperative and state['lifecycle'] == 'MANAGED':
+                state.update(lifecycle='UNPROVEN', substrate=None)
+                state['events'].append({'time': now(), 'transition': 'INVALIDATE', 'reason': 'Explicit canonical cooperative configuration'})
+            if cooperative and config['profile'] == 'github-backlog-v1':
+                binding['project_work_item'] = project_item
             binding.update(authority=state['lifecycle'], config=digest(config), created_at=now())
             if config['profile'] == 'github-backlog-v1':
                 binding.update(work_identity=work['identity'], work_revision=work['revision'], actor=work['actor'])
@@ -251,7 +318,7 @@ class Runtime:
     def read_bytes(self, name):
         return safe_path(self.storage, name).read_bytes()
 
-    def entry(self):
+    def entry(self, full=False):
         config = self.repo.config()
         state = self.state()
         instructions = ['AGENTS.md', '.harness/AGENT.md']
@@ -262,6 +329,16 @@ class Runtime:
                 instructions.append(RUNTIME_ENTRY)
         except (ValueError, KeyError, TypeError):
             pass  # Doctor preserves the exact installation gap below.
+        if not full:
+            binding = state.get('workspaces', {}).get(str(self.repo.root))
+            return {'mode': mode(config), 'instruction_paths': instructions,
+                    'work_authority': config['authorities']['work'], 'target': config['target'],
+                    'workspace': binding, 'assessment': 'not-observed',
+                    'next': ('Continue project acceptance/CI, then integrate the exact PR' if binding else
+                             'Use the project work item and isolated worktree; workspace --bind preserves an existing branch' if mode(config) == 'cooperative' else
+                             'Use the bound Issue workspace; strict operations revalidate complete closure'),
+                    'limitations': (['Client checks can be bypassed by administrators/writers; no server protection or complete closure claimed']
+                                    if mode(config) == 'cooperative' else ['Entry is local orientation, not fresh activation proof'])}
         try:
             work = self.provider.list_work(config)
             work_error = None
@@ -362,6 +439,8 @@ class Runtime:
             if state['lifecycle'] in ('MANAGED', 'UNPROVEN'):
                 self.preflight()
             config = self.repo.config()
+            if release is not None and mode(config) == 'cooperative':
+                raise ValueError('Published artifact migrations do not declare cooperative compatibility; preserve project artifacts and upgrade the immutable tool pin through project governance')
             if release is None:
                 # Installer refuses uncontrolled changes to any installed artifact.
                 result = bootstrap(self.repo, config['repository'], config['target'], governed_upgrade=True)
@@ -432,6 +511,10 @@ class Runtime:
             return {'applied': applied, 'activated': False, 'next': 'Observe live enforcement and complete deployment proof before activation'}
 
     def integrate(self, pr):
+        if mode(self.repo.config()) == 'cooperative':
+            from .cooperative import integrate
+            with self.locked():
+                return integrate(self, pr)
         from .ci import candidate_context, current_context
         from .provider import gh_write
         with self.locked():
@@ -466,10 +549,13 @@ class Runtime:
             self.save_state(state)
             return result
 
-    def break_glass_after_integration(self, sha):
+    def break_glass_after_integration(self, sha, reason='Integration tree mismatch'):
         state = self.state()
         state.update(lifecycle='UNPROVEN', substrate=None)
-        state['events'].append({'time': now(), 'transition': 'INVALIDATE', 'reason': 'Integration tree mismatch', 'commit': sha})
+        binding = state.get('workspaces', {}).get(str(self.repo.root))
+        if binding is not None and mode(self.repo.config()) == 'cooperative':
+            binding['invalidated'] = {'time': now(), 'reason': reason, 'commit': sha}
+        state['events'].append({'time': now(), 'transition': 'INVALIDATE', 'reason': reason, 'commit': sha})
         self.save_state(state)
 
     def release(self):

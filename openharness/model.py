@@ -40,12 +40,26 @@ def default_config(repository, target):
     }
 
 
+def mode(config):
+    # Existing installations/callers retain strict semantics.
+    return config.get('mode', 'strict')
+
+
 def validate_config(config):
     expected = {'schema', 'profile', 'repository', 'target', 'authorities', 'envelope', 'verification'}
+    if isinstance(config, dict):
+        expected |= set(config) & {'mode', 'integration_command'}
     if isinstance(config, dict) and config.get('profile') == 'github-backlog-v1':
         expected.add('work')
     if not isinstance(config, dict) or set(config) != expected:
         raise ValueError('Configuration must contain the exact supported fields; guarantee omission/overrides are forbidden')
+    if mode(config) not in ('strict', 'cooperative'):
+        raise ValueError('Unsupported execution mode')
+    command = config.get('integration_command')
+    if 'integration_command' in config and (mode(config) != 'cooperative' or
+            not isinstance(command, list) or not command or
+            not all(isinstance(v, str) and v and not re.search(r'[{}]', v.replace('{pr}', '').replace('{work_item}', '')) for v in command)):
+        raise ValueError('Project integration command requires cooperative mode and argv with only {pr}/{work_item} substitutions')
     if config['schema'] != 1 or config['profile'] not in ('github-pr-v1', 'github-backlog-v1'):
         raise ValueError('Unsupported schema or profile')
     if not isinstance(config['repository'], str) or not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', config['repository']):
@@ -69,7 +83,7 @@ def validate_config(config):
             raise ValueError('Envelope actors and exclusions must be string lists')
     verification = config['verification']
     fields = {'commands', 'material_inputs', 'environment', 'required_check', 'expected_app_id'}
-    if not isinstance(verification, dict) or not fields <= set(verification) or set(verification) - fields - {'controller', 'sandbox_image'}:
+    if not isinstance(verification, dict) or not fields <= set(verification) or set(verification) - fields - {'controller', 'sandbox_image', 'workflow'}:
         raise ValueError('Invalid verification configuration')
     if not isinstance(verification['commands'], list) or not all(isinstance(c, list) and c and all(isinstance(v, str) and v for v in c) for c in verification['commands']):
         raise ValueError('Verification commands must be nonempty argv lists, never shell text')
@@ -82,6 +96,10 @@ def validate_config(config):
     app = verification['expected_app_id']
     if app is not None and (type(app) is not int or app <= 0):
         raise ValueError('Check provenance app id must be a positive integer or unresolved null')
+    workflow = verification.get('workflow')
+    if 'workflow' in verification and (mode(config) != 'cooperative' or not isinstance(workflow, str) or
+            not re.fullmatch(r'\.github/workflows/[A-Za-z0-9_-]+\.ya?ml', workflow)):
+        raise ValueError('Cooperative CI must name one existing workflow path')
     controller = verification.get('controller')
     if controller is not None:
         if not isinstance(controller, dict) or set(controller) != {'repository', 'revision'} or not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', controller.get('repository', '')) or not re.fullmatch(r'[0-9a-f]{40}', controller.get('revision', '')):
@@ -141,6 +159,10 @@ def evaluate(config, local, provider):
         ('fresh-agent', 'Installed entry and CLI expose authority, Issue/PR discovery, workspace binding and recovery'),
     ):
         resolve(name, installed, reason, 'supported local lifecycle commands; remote enforcement separately evaluated', ['installation', 'config', 'runtime'])
+    if mode(config) == 'cooperative':
+        for name in ('integration', 'mutation', 'provenance', 'coverage', 'closure'):
+            resolve(name, False, 'Cooperative operation does not establish strict native enforcement or managed closure',
+                    'repository authoritative transitions', ['mode', 'native_enforcement'])
     guarantees = [rows[name] for name in CATALOGUE]
     return {
         'profile': config['profile'], 'repository': config['repository'],

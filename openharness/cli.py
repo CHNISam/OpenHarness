@@ -12,12 +12,14 @@ from .runtime import Runtime
 
 def parser():
     command = argparse.ArgumentParser(description='OpenHarness native GitHub profile')
+    command.add_argument('--verbose', action='store_true', help='Include full successful verification/evidence details')
     command.add_argument('--repo', default='.', help='Target repository path')
     command.add_argument('--version', action='version', version=__version__)
     commands = command.add_subparsers(dest='command', required=True)
     install = commands.add_parser('bootstrap', help='Stage missing project-local mechanisms without activation')
     install.add_argument('--repository', help='owner/repository; defaults to origin')
     install.add_argument('--target', default='main')
+    install.add_argument('--mode', choices=['cooperative', 'strict'], help='New installs default cooperative; existing installs keep their mode')
     install.add_argument('--profile', choices=['github-pr-v1', 'github-backlog-v1'])
     install.add_argument('--work-config', help='Repository-relative JSON Backlog adapter configuration for Genesis')
     for name, help_text in (
@@ -30,7 +32,9 @@ def parser():
         ('setup-apply', 'Install resolved native policy in Genesis without activating'),
         ('release', 'Release an integrated binding while preserving worktree and Issue'),
     ):
-        commands.add_parser(name, help=help_text)
+        subparser = commands.add_parser(name, help=help_text)
+        if name == 'entry':
+            subparser.add_argument('--full', action='store_true', help='Explicit live work discovery and full Doctor audit')
     upgrade = commands.add_parser('upgrade', help='Stage governed artifacts or an immutable release migration')
     upgrade.add_argument('--release', help='Exact stable SemVer; never a runtime ref')
     upgrade.add_argument('--adopt-backlog', action='store_true', help='Stage explicit reviewed legacy Backlog adoption in Genesis')
@@ -46,6 +50,7 @@ def parser():
     work_item.add_argument('--issue', type=int)
     work_item.add_argument('--task', help='Exact canonical Backlog task ID')
     workspace.add_argument('--change', required=True)
+    workspace.add_argument('--bind', action='store_true', help='Bind the current registered project worktree without renaming it (cooperative)')
     workspace.add_argument('--genesis', action='store_true', help='Explicit bootstrap installer authority, only before activation')
     for name in ('candidate', 'verify', 'evidence'):
         candidate = commands.add_parser(name, help='Candidate-bound local diagnostics (not remote integration authority)')
@@ -64,7 +69,11 @@ def main(argv=None):
         exit_code = 0
         if args.command == 'bootstrap':
             work = json.loads(safe_path(repo.root, args.work_config).read_text(encoding='utf-8')) if args.work_config else None
-            result = bootstrap(repo, args.repository, args.target, profile=args.profile, work=work)
+            selected_mode = args.mode or (None if safe_path(repo.root, '.harness/config.json').exists() else 'cooperative')
+            result = bootstrap(repo, args.repository, args.target, profile=args.profile, work=work, mode=selected_mode)
+        elif args.command == 'entry':
+            result = runtime.entry(args.full)
+            exit_code = 0 if not args.full or result['doctor']['closure'] else 2
         elif args.command == 'break-glass':
             result = runtime.break_glass(args.reason)
         elif args.command == 'upgrade':
@@ -81,7 +90,7 @@ def main(argv=None):
         elif args.command == 'handoff':
             result = runtime.handoff(args.reason)
         elif args.command == 'workspace':
-            result = runtime.workspace(args.task if args.task is not None else args.issue, args.change, args.genesis)
+            result = runtime.workspace(args.task if args.task is not None else args.issue, args.change, args.genesis, args.bind)
         elif args.command == 'candidate':
             from .model import candidate_id
             candidate = runtime._verification_candidate(args.head, args.base)
@@ -101,6 +110,11 @@ def main(argv=None):
                 exit_code = 0 if result['closure'] else 2
             elif args.command in ('entry', 'reconcile'):
                 exit_code = 0 if result['doctor']['closure'] else 2
+        if not args.verbose and args.command == 'verify' and result.get('passed'):
+            result = {key: value for key, value in result.items() if key not in ('candidate', 'execution')}
+            result['checks'] = [{key: value for key, value in check.items() if key not in ('stdout', 'stderr')} for check in result['checks']]
+        elif not args.verbose and args.command == 'evidence':
+            result = {key: value for key, value in result.items() if key not in ('candidate', 'record')}
         print(json_text(result), end='')
         return exit_code
     except (ValueError, OSError, subprocess.SubprocessError, KeyError, TypeError) as exc:
