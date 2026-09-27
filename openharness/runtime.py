@@ -308,14 +308,29 @@ class Runtime:
         valid = isinstance(record, dict) and record.get('candidate') == candidate and record.get('candidate_id') == cid and record.get('passed') is True
         return {'candidate_id': cid, 'fresh': valid, 'record': record, 'authorizes_integration': False}
 
-    def upgrade(self):
+    def upgrade(self, release=None, enroll=False):
         with self.locked():
             state = self.state()
             if state['lifecycle'] in ('MANAGED', 'UNPROVEN'):
                 self.preflight()
             config = self.repo.config()
-            # Installer refuses uncontrolled changes to any installed artifact.
-            result = bootstrap(self.repo, config['repository'], config['target'], governed_upgrade=True)
+            if release is None:
+                # Installer refuses uncontrolled changes to any installed artifact.
+                result = bootstrap(self.repo, config['repository'], config['target'], governed_upgrade=True)
+            else:
+                from .updates import Releases, apply, installed, plan, read_files
+                controller = config['verification'].get('controller')
+                if not controller:
+                    raise ValueError('Immutable controller must be configured before release enrollment')
+                identity = installed(self.repo)
+                if (identity is None) != enroll:
+                    raise ValueError('Explicit enrollment required exactly once before release upgrades')
+                selected = Releases(controller['repository']).resolve(release)
+                result = plan(config, identity, selected, read_files(self.repo))
+                # Invalidate before writing: interruption must never retain activation.
+                state.update(substrate=None, lifecycle='UNPROVEN' if state['lifecycle'] == 'MANAGED' else state['lifecycle'])
+                self.save_state(state)
+                apply(self.repo, result['changes'])
             state.update(substrate=None, lifecycle='UNPROVEN' if state['lifecycle'] == 'MANAGED' else state['lifecycle'])
             state.setdefault('events', []).append({'time': now(), 'transition': 'UPGRADE_STAGE', 'version': __version__})
             self.save_state(state)

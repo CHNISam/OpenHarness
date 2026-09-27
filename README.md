@@ -264,3 +264,14 @@ Harness self-upgrades also protect tool code, acceptance tests and frozen contra
 when this repository hosts its producer. These changes retain exact owner authority
 and native integration; observer-only code is distinguished from executed producer
 dependencies. Local verifier code/runtime identity still invalidates stale activation.
+
+## Release → consumer upgrades
+
+[Consumer upgrades](docs/consumer-upgrades.md) use immutable stable releases and
+self-hosted Renovate to discover, propose and verify upgrades. Execution stays
+pinned to the existing controller SHA. Machine-readable installation metadata,
+explicit compatibility and transactional generated-artifact migration preserve
+project configuration. Normal Issue-bound PRs, exact owner control approval and
+native checks still govern integration. Changed installations require fresh
+native deployment proof, Doctor and explicit activation; no bot activates a
+consumer. Start with explicit enrollment of an already pinned published release.
