@@ -53,6 +53,61 @@ class GitHub:
     def __init__(self, api=None):
         self.api = api or gh_api
 
+    def target(self, config):
+        """Only the canonical ref needed by this operation; no policy audit."""
+        import re
+        sha = self.api(f'repos/{config["repository"]}/branches/{quote(config["target"], safe="")}')['commit']['sha']
+        if not isinstance(sha, str) or not re.fullmatch(r'[0-9a-f]{40}', sha):
+            raise ProviderError('Canonical target must resolve to an exact commit')
+        return sha
+
+    def project_work(self, repo, config, item, sha):
+        # Git objects fetched from the configured origin are bound to the observed
+        # canonical commit. Reuse the reader, avoiding one API request per task.
+        if config['profile'] != 'github-backlog-v1':
+            return self.work(config, item)
+        from .backlog import authorize, local_corpus
+        try:
+            repo.revision(sha)
+        except ValueError:
+            repo.git('fetch', '--no-tags', 'origin', config['target'])
+            repo.revision(sha)
+        observation = local_corpus(repo, sha, config['work'])
+        actor = self.api('user').get('login')
+        return {**authorize(observation, config['work'], item, actor), 'revision': sha}
+
+    def acceptance(self, config, pull):
+        """Observe the existing Actions check, bound to its actual run and PR head."""
+        selected = config['verification']
+        workflow, app = selected.get('workflow'), selected.get('expected_app_id')
+        if not workflow or not app:
+            raise ValueError('Configure the existing CI workflow path and expected check App before integration')
+        prefix, head = f'repos/{config["repository"]}', pull['head']['sha']
+        checks = self.api(f'{prefix}/commits/{head}/check-runs?filter=latest&per_page=100')
+        runs = self.api(f'{prefix}/actions/runs?head_sha={head}&per_page=100')
+        for data, field in ((checks, 'check_runs'), (runs, 'workflow_runs')):
+            if (not isinstance(data, dict) or not isinstance(data.get(field), list) or
+                    type(data.get('total_count')) is not int or data['total_count'] != len(data[field]) or len(data[field]) >= 100):
+                raise ProviderError('CI observation malformed or incomplete')
+        matching = [c for c in checks['check_runs'] if c.get('name') == selected['required_check']]
+        if len(matching) != 1:
+            raise ValueError('Existing required CI check missing or ambiguous')
+        check = matching[0]
+        if (check.get('head_sha') != head or check.get('app', {}).get('id') != app or
+                check.get('status') != 'completed' or check.get('conclusion') != 'success'):
+            raise ValueError('Existing required CI check is stale, untrusted or not successful')
+        suite = check.get('check_suite', {}).get('id')
+        matching = [r for r in runs['workflow_runs'] if r.get('check_suite_id') == suite]
+        if type(suite) is not int or len(matching) != 1:
+            raise ValueError('Existing CI run provenance missing or ambiguous')
+        run = matching[0]
+        if (run.get('head_sha') != head or run.get('path') != workflow or
+                run.get('event') != 'pull_request' or run.get('status') != 'completed' or
+                run.get('conclusion') != 'success' or
+                not any(p.get('number') == pull['number'] for p in run.get('pull_requests', []))):
+            raise ValueError('Existing CI run does not bind the selected workflow, PR and exact head')
+        return {'check': check['id'], 'run': run['id'], 'attempt': run['run_attempt'], 'head': head}
+
     def observe(self, config):
         prefix = f'repos/{config["repository"]}'
         target = quote(config['target'], safe='')

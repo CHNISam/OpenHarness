@@ -2,8 +2,8 @@
 
 OpenHarness turns a frozen repository guarantee contract into executable evaluation,
 native Git workspaces, candidate-bound local verification and explicit recovery.
-Project truth stays in the target repository. GitHub remains the authority for
-Issues, PRs, canonical refs, integration rules and accepted checks.
+Project truth stays in the target repository. The existing Backlog or Issues remain work authority; native PRs, canonical refs
+and project CI remain their respective sources of truth.
 
 **Version 0.3 adds explicit legacy Backlog adoption and release ownership metadata.** Run `entry` and `doctor`
 for actual current lifecycle and guarantees; a saved report cannot activate a repository.
@@ -13,10 +13,11 @@ The [frozen contract](docs/contracts/repository-agent-harness-v1.0.md) remains n
 
 Requires Python 3.11+, Git 2.38+ (`merge-tree --write-tree`), and authenticated
 [GitHub CLI](https://cli.github.com/manual/gh_auth_login) with read access to repository
-metadata, Issues, workflows, contents and enforcement configuration. Permission errors
+metadata and the work/PR/CI used by an operation. Enforcement configuration access
+is additionally required for strict operation and full audits. Permission errors
 are unresolved observations. This version supports `github.com` and the
 `github-pr-v1` profile, plus the bounded [canonical Backlog profile](docs/backlog-profile.md)
-when its separate producer and native deployment proof are installed. Windows and
+with its separate producer and native deployment proof for strict operation. Windows and
 POSIX native process locks are supported.
 
 ```sh
@@ -27,7 +28,8 @@ openharness --help
 ```
 
 Use `python -m openharness` directly from this source directory without installation.
-All commands emit JSON. Exit `0` means that command succeeded, `2` means an open gap,
+All commands emit JSON. A successful default `entry` means orientation succeeded,
+not that closure was observed. Exit `0` means that command succeeded, `2` means an open gap,
 stale proof or failing candidate check, and `1` means invalid input/tool failure.
 A successful local verification never authorizes remote integration.
 
@@ -49,10 +51,39 @@ Feedback is evidence, not automatic authority to relax guarantees. Improvements 
 or strengthen the declared execution/trust envelope, prefer native provider/runtime capabilities
 where sufficient, and add only the OpenHarness-specific delta.
 
-## Bootstrap a target
+## Default: use the existing project workflow
+
+The CLI defaults new installations to **cooperative** execution. Private GitHub Free
+repositories can use workspaces, acceptance and exact-head PR integration without
+rulesets, deployment proof or managed activation. Existing installations without a
+`mode` field retain strict behavior; permission errors never auto-downgrade them.
 
 ```sh
-openharness --repo /path/to/project bootstrap --target main
+openharness --repo /path/to/project bootstrap --target develop
+openharness --repo /path/to/project entry
+```
+
+Keep project-owned instructions and CI. Review the config once: select the existing
+work authority, acceptance argv, required check, its App id and workflow path. For
+Backlog use the existing bounded reader; task files and Backlog configuration are
+not migrated. Bind an existing worktree with `workspace --task TASK-1 --change fix
+--bind`, preserving its branch, or create one with the existing workspace command.
+See the [short cooperative recipe](docs/cooperative-workflow.md).
+
+Daily `entry` is local orientation: no API calls, task enumeration or full Doctor.
+Successful `verify` and `evidence` output concise summaries; `--verbose` includes
+details. `entry --full` and `doctor` explicitly request live audits. Strict protected
+transitions continue to revalidate complete closure.
+
+Cooperative checks can be bypassed by administrators and repository writers.
+They do not establish server enforcement or complete closure. Missing native
+capabilities remain OPEN GAP in Doctor; they do not block independent core operations.
+There is no requirement to change the repository's plan or visibility.
+
+## Optional strict bootstrap
+
+```sh
+openharness --repo /path/to/project bootstrap --mode strict --target main
 openharness --repo /path/to/project setup-plan
 openharness --repo /path/to/project doctor
 openharness --repo /path/to/project entry
