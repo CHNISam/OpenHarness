@@ -29,3 +29,6 @@ This documentation-only candidate exercises the complete acceptance suite and
 independent publisher under the repaired canonical pin. It changes no acceptance,
 work authority, workflow or policy. Native success, protected merge and an equal
 integrated tree are required before its references can become a valid proof case.
+
+This disposable unbound candidate has no pull request and no trusted check. A
+direct canonical update must be rejected; it must not become deployment authority.
