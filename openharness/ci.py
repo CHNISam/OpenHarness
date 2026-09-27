@@ -298,6 +298,11 @@ def publish(config, event, result, head, base, tree, identity, api=gh_api, write
         # publish a rejection, never success, to one observed PR snapshot.
         pull = api(f'{prefix}/pulls/{int(event["pull_request"]["number"])}')
         context = {'head': pull['head']['sha'], 'merge': pull.get('merge_commit_sha')}
+    rejected_head = event['pull_request'].get('head', {}).get('sha') or head
+    if state != 'success' and rejected_head and rejected_head != context['head']:
+        # A cancelled/failed old run must not overwrite the newer head's result.
+        # Its old synthetic merge is no longer observable from the current PR.
+        context = {'head': rejected_head, 'merge': None}
     subjects = {context['head']}
     if context.get('merge'):
         subjects.add(context['merge'])

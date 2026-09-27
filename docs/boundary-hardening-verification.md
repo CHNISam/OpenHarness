@@ -23,6 +23,8 @@ checks immutable merge identity/tree/ordered parents and reobserves after reads.
 Base/work/merge drift rejects success. Ref movement between status writes does not
 retarget the verified immutable subjects. There is no atomic provider transaction
 covering all reads/writes; native strict up-to-date integration remains required.
+Cancelled/failed old runs reject their own event head rather than overwriting the
+new PR head with a failure; this adjacent false-negative was reproduced and tested.
 
 One audit reuses only successful exact-commit Git object reads. Mutable observations
 and final target freshness are re-read; separate audits never share a cache. API/log
@@ -36,7 +38,7 @@ selected-actions deployment in an arbitrary consumer.
 
 ## Local validation
 
-`python -m unittest discover -s tests -v`: 160 tests in 121.286 seconds, 159 passed,
+`python -m unittest discover -s tests -v`: 161 tests in 123.131 seconds, 160 passed,
 one skipped because Windows does not permit creating symlinks. No failures.
 `python -m compileall -q openharness` and `git diff --check`: passed.
 

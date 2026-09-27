@@ -195,6 +195,17 @@ class ControllerTests(unittest.TestCase):
         self.assertEqual('failure', failed['state'])
         self.assertEqual(2, len(writes))
 
+    def test_cancelled_or_failed_old_run_does_not_reject_a_new_pr_head(self):
+        updated = copy.deepcopy(self.pull)
+        updated['head']['sha'], updated['merge_commit_sha'] = 'e' * 40, 'f' * 40
+        writes = []
+        event = {'pull_request': {'number': 7, 'head': {'sha': 'a' * 40}}}
+        with patch.dict('os.environ', {'GITHUB_RUN_ID': '123'}):
+            result = publish(self.config, event, 'cancelled', None, None, None, None,
+                             self.publisher_api([updated]), lambda *args: writes.append(args))
+        self.assertEqual(['a' * 40], result['subjects'])
+        self.assertEqual(['repos/owner/repo/statuses/' + 'a' * 40], [call[0] for call in writes])
+
     def test_unverified_merge_objects_never_receive_success(self):
         context = candidate_context(self.config, self.pull, {'state': 'open', 'number': 3})
         identity = digest({'context': context, 'tree': 'd' * 40, 'verification': self.config['verification']})
