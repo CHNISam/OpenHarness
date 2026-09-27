@@ -46,6 +46,30 @@ effective authority/fencing adapter. No conversational history is required.
 '''
 MARKER = '<!-- OpenHarness entry -->'
 INSTRUCTION = f'\n{MARKER}\nRead `.harness/AGENT.md` and run `openharness --repo . entry` before managed work.\n'
+BACKLOG_ENTRY = '''# OpenHarness entry
+
+Read `.harness/config.json`; run `openharness --repo . entry` and `doctor` for live
+authority, legal work and current closure. Exit 2 means OPEN GAP, never success.
+Canonical Backlog task files at the GitHub target ref are the sole work authority.
+Use `workspace --task TASK_ID --change NAME` for a task-bound isolated Change;
+PRs require exactly one `Work-Item: TASK_ID` line and the bound backlog branch.
+Explicit configured assignee mapping authorizes the native executor/PR author.
+Unassigned/ambiguous work, incomplete dependencies and stale corpus bindings reject.
+Task metadata is not exclusive ownership or fencing; only the declared trusted
+single-writer envelope is supported. Competing/unknown writers remain OPEN GAP.
+Task corpus/control changes require exact native owner approval on the PR.
+Trusted immutable baseline verification and independent publication preserve native
+strict candidate/ref/check enforcement. Local verification never authorizes merge.
+Use `integrate --pr N`, then `release`, or `handoff --reason TEXT` for continuity.
+Reconcile invalidates drift without acquiring authority or automatically activating.
+Break-glass invalidates guarantees and grants no remote bypass. Unsupported task
+syntax and unavailable native proof remain OPEN GAP. Run current Doctor/activation;
+saved reports and conversations are not activation authority.
+'''
+
+
+def entry_text(config):
+    return BACKLOG_ENTRY if config['profile'] == 'github-backlog-v1' else ENTRY
 WORKFLOW = '''# REVIEW TEMPLATE ONLY: candidate-controlled workflow is not trusted provenance.
 # Install a pinned verifier through provider-enforced candidate-independent wiring.
 name: openharness
@@ -109,7 +133,7 @@ class Repository:
         controls = {p: hashlib.sha256(safe_path(self.root, p).read_bytes().replace(b'\r\n', b'\n')).hexdigest() if safe_path(self.root, p).is_file() else None for p in paths}
         entry = safe_path(self.root, '.harness/AGENT.md')
         agents = safe_path(self.root, 'AGENTS.md')
-        installed = all(controls.values()) and entry.read_text(encoding='utf-8') == ENTRY and MARKER in agents.read_text(encoding='utf-8')
+        installed = all(controls.values()) and entry.read_text(encoding='utf-8') == entry_text(self.config()) and MARKER in agents.read_text(encoding='utf-8')
         from .updates import installation_observation
         try:
             installation = installation_observation(self)
@@ -152,10 +176,18 @@ class Repository:
         return {'head': head_sha, 'base': base_sha, 'tree': tree, 'config': digest(config), 'inputs': digest(inputs), 'environment': digest(env)}
 
     def workspace(self, issue, change, base):
-        if type(issue) is not int or issue <= 0 or not re.fullmatch(r'[a-z][a-z0-9-]{0,47}', change):
+        if self.config()['profile'] == 'github-backlog-v1':
+            from .backlog import task_id
+            issue = task_id(issue)
+            prefix = f'backlog-{issue}'
+        elif type(issue) is int and issue > 0:
+            prefix = str(issue)
+        else:
+            raise ValueError('Positive Issue required for the GitHub Issue profile')
+        if not re.fullmatch(r'[a-z][a-z0-9-]{0,47}', change):
             raise ValueError('Positive Issue and lowercase change name required')
         sha = self.revision(base)
-        name = f'{issue}-{change}'
+        name = f'{prefix}-{change}'
         path = safe_path(self.common_dir, f'openharness/workspaces/{name}')
         path.parent.mkdir(parents=True, exist_ok=True)
         branch = f'codex/{name}'
@@ -165,7 +197,7 @@ class Repository:
         return {'work_item': issue, 'change': change, 'branch': branch, 'path': str(path), 'base': sha, 'protected_scope': f'change:{branch}'}
 
 
-def bootstrap(repo, repository=None, target='main', governed_upgrade=False):
+def bootstrap(repo, repository=None, target='main', governed_upgrade=False, profile=None, work=None):
     runtime = safe_path(repo.common_dir, 'openharness/runtime.json')
     if runtime.exists() and not governed_upgrade:
         try:
@@ -178,10 +210,21 @@ def bootstrap(repo, repository=None, target='main', governed_upgrade=False):
     if repository.lower() != repo.identity().lower():
         raise ValueError('Requested repository does not match origin authority')
     config = default_config(repository, target)
+    if safe_path(repo.root, '.harness/config.json').exists():
+        config = repo.config()
+        if (profile is not None and profile != config['profile']) or (work is not None and work != config.get('work')):
+            raise ValueError('Bootstrap cannot reconfigure installed authority; use reviewed upgrade')
+    elif profile is not None:
+        config['profile'] = profile
+        if profile == 'github-backlog-v1':
+            config['authorities']['work'] = 'repository-backlog'
+            config['work'] = work
+        elif work is not None:
+            raise ValueError('Work configuration is only supported by the Backlog profile')
     validate_config(config)
     from .ci import workflow_text
     plans = {
-        '.harness/config.json': json_text(config), '.harness/AGENT.md': ENTRY,
+        '.harness/config.json': json_text(config), '.harness/AGENT.md': entry_text(config),
         '.harness/github-workflow.yml.template': workflow_text(),
     }
     agents_path = safe_path(repo.root, 'AGENTS.md')
