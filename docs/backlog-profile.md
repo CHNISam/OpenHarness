@@ -137,3 +137,12 @@ Missing/unavailable/expired evidence blocks coverage and activation.
 See [the native validation record](backlog-native-validation.md) for the bounded
 synthetic rollout, immutable subjects, rejected cases and Managed exit proof.
 It is historical evidence; live `doctor` remains the activation authority.
+
+## Published installation adoption
+
+The 0.3.0 immutable release model supports this profile, explicit legacy Backlog
+adoption and project-owned instructions through a separate compiler runtime entry.
+See [consumer upgrade/adoption instructions](consumer-upgrades.md). Actor mappings
+may use literal `platform:session` identifiers; there is no automatic session
+assignment, lease or fencing assertion. The private-plan native enforcement gap
+remains a deployment blocker, never a migration exemption.

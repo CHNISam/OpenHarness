@@ -33,6 +33,7 @@ def parser():
         commands.add_parser(name, help=help_text)
     upgrade = commands.add_parser('upgrade', help='Stage governed artifacts or an immutable release migration')
     upgrade.add_argument('--release', help='Exact stable SemVer; never a runtime ref')
+    upgrade.add_argument('--adopt-backlog', action='store_true', help='Stage explicit reviewed legacy Backlog adoption in Genesis')
     upgrade.add_argument('--enroll', action='store_true', help='Record the already pinned immutable release')
     integrate = commands.add_parser('integrate', help='Integrate exact bound candidate through native protected PR merge')
     integrate.add_argument('--pr', type=int, required=True)
@@ -69,7 +70,12 @@ def main(argv=None):
         elif args.command == 'upgrade':
             if args.enroll and not args.release:
                 raise ValueError('--enroll requires --release')
-            result = runtime.upgrade(args.release, args.enroll)
+            if args.adopt_backlog:
+                if not args.release or args.enroll:
+                    raise ValueError('--adopt-backlog requires --release and excludes --enroll')
+                result = runtime.adopt_backlog(args.release)
+            else:
+                result = runtime.upgrade(args.release, args.enroll)
         elif args.command == 'integrate':
             result = runtime.integrate(args.pr)
         elif args.command == 'handoff':

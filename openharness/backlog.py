@@ -43,7 +43,7 @@ def validate_work(work):
         raise ValueError('Backlog legal and completed statuses must be explicit and distinct')
     actors = work['actors']
     if (not isinstance(actors, dict) or not actors or not all(
-            isinstance(key, str) and re.fullmatch(r'@?[A-Za-z0-9_-]+', key)
+            isinstance(key, str) and re.fullmatch(r'@?[A-Za-z0-9_-]+(?::[A-Za-z0-9_-]+)?', key)
             and isinstance(value, str) and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9-]{0,38}', value)
             for key, value in actors.items()) or len({key.lower() for key in actors}) != len(actors)):
         raise ValueError('Backlog actor mapping must be explicit and unambiguous')

@@ -5,7 +5,7 @@ native Git workspaces, candidate-bound local verification and explicit recovery.
 Project truth stays in the target repository. GitHub remains the authority for
 Issues, PRs, canonical refs, integration rules and accepted checks.
 
-**Version 0.2 implements the native GitHub closure adapter.** Run `entry` and `doctor`
+**Version 0.3 adds explicit legacy Backlog adoption and release ownership metadata.** Run `entry` and `doctor`
 for actual current lifecycle and guarantees; a saved report cannot activate a repository.
 The [frozen contract](docs/contracts/repository-agent-harness-v1.0.md) remains normative.
 

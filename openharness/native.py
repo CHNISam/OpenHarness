@@ -14,7 +14,7 @@ def producer_blobs():
     # Observer/CLI/recovery upgrades do not replace that immutable producer.
     paths = {'openharness/__init__.py', 'openharness/ci.py', 'openharness/model.py',
              'openharness/provider.py', 'openharness/repository.py',
-             'openharness/backlog.py', 'openharness/updates.py'}
+             'openharness/backlog.py', 'openharness/updates.py', 'openharness/adoption.py'}
     return {path: sha for path, sha in controller_blobs().items() if path in paths}
 
 
