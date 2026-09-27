@@ -1,9 +1,10 @@
 # Repository-native work authority proposal
 
-Status: **DRAFT — owner review required; not an approved design or supported profile.**
+Status: **APPROVED approach on 2026-09-27; implementation and native proof pending.**
 Work authority for this repository remains GitHub Issues. This proposal addresses
 [Issue #24](https://github.com/CHNISam/OpenHarness/issues/24); it grants no activation
-or implementation authority by itself and changes no frozen contract.
+by itself and changes no frozen contract. The owner approved the separate-profile
+approach in the current task; the bounded implementation details below implement it.
 
 ## Observed requirement and options
 
@@ -111,3 +112,41 @@ Reference: [Backlog.md upstream](https://github.com/MrLesk/Backlog.md) stores wo
 repository Markdown. The actual pinned schema/parser must be inspected during design
 finalization; current upstream documentation alone does not prove version 1.53.0
 compatibility.
+
+## Bounded implementation design
+
+Pin the inspected upstream v1.53.0 commit
+`fd20f71493fb4eda44b021aa89f257956f17fb71`. Upstream uses gray-matter/YAML;
+the standard-library adapter supports an explicit strict flat subset rather than
+claiming full YAML compatibility. Bare/quoted scalar strings and inline/block string
+lists are supported; anchors, aliases, tags, nested objects, multiline scalars,
+duplicate fields and unknown fields reject the corpus. Required fields are `id`,
+`title`, `status`, `assignee`, `dependencies`. Dates and known descriptive metadata
+are non-authorizing. The Markdown body is opaque, never executed or interpreted as
+authority. Unsupported formats remain a visible gap.
+
+New-profile configuration adds a `work` object containing `format`, `directories`,
+`ready_statuses`, `done_status` and an explicit assignee-to-GitHub-login `actors`
+mapping. The format identifier is `backlog-md-1.53-subset-v1`. A project chooses
+its actual corpus directories and status names; no hidden default grants authority.
+Native authenticated login is used for workspace/preflight, and PR author login is
+used by the trusted verifier/publisher/integration path. All configured assignees
+resolve through the mapping; unassigned/unknown/ambiguous assignments reject.
+Exactly one mapped executor may authorize a task under this initial bounded profile.
+
+The CLI adds `workspace --task TASK_ID --change NAME` (mutually exclusive with
+`--issue`); PRs use exactly one `Work-Item: TASK_ID`. Branches use
+`codex/backlog-TASK_ID-CHANGE`. Immutable tree/blob reads establish a corpus digest
+and selected transitive graph, bound to canonical target SHA. Reassignment, status,
+dependency or corpus drift invalidates a binding conservatively; recovery creates
+fresh legal bindings rather than editing saved authority. Changed task files require
+owner approval on the PR's native comment surface, which is Change control approval
+rather than a writable work mirror. All resulting dependencies must exist and be
+acyclic. Completing selected work requires successful acceptance and owner approval;
+other completion changes cannot remove failed prerequisites from baseline authority.
+
+Do not migrate OpenHarness's own Issue authority. Roll out code through its current
+managed Issue #24 path, then validate the new producer/profile in a dedicated native
+adopter proof repository. Keep the current independently installed producer available
+to manage the existing profile while new-source verification identity requires fresh
+proof. A tested adapter without that deployment remains explicitly unproven.
