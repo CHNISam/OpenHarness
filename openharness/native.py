@@ -14,7 +14,7 @@ def producer_blobs():
     # Only code executed by `python -m openharness.ci` produces accepted evidence.
     # Observer/CLI/recovery upgrades do not replace that immutable producer.
     paths = {'openharness/__init__.py', 'openharness/ci.py', 'openharness/model.py',
-             'openharness/provider.py', 'openharness/repository.py'}
+             'openharness/provider.py', 'openharness/repository.py', 'openharness/backlog.py'}
     return {path: sha for path, sha in controller_blobs().items() if path in paths}
 
 
@@ -167,6 +167,86 @@ def observe_proof(config, observation, api, logs=job_log):
         if suite.get('result') != 'fail' or suite.get('ref') != f'refs/heads/{config["target"]}' or suite.get('after_sha') != cases['direct-update']['head']:
             raise ProviderError('Direct authoritative bypass rejection not observed')
         result['direct-update'] = {'rule_suite_id': suite['id'], 'result': 'fail'}
-        return {'valid': True, 'cases': result, 'proof_subject': digest(proof)}
+        work_result = None
+        if config['profile'] == 'github-backlog-v1':
+            work_result = observe_work_proof(config, proof, api, logs)
+        return {'valid': True, 'cases': result, 'proof_subject': digest(proof),
+                **({'work_cases': work_result} if work_result is not None else {})}
     except (ProviderError, ValueError, KeyError, TypeError) as exc:
         return {'valid': False, 'reason': str(exc)}
+
+
+def observe_work_proof(config, proof, api, logs):
+    """Reobserve native task-adapter rejection and stale-owner proof, not flags."""
+    from .backlog import authorize, read_corpus
+    reasons = {
+        'wrong-executor': 'Backlog executor is not currently assigned',
+        'blocked-dependency': 'Backlog dependency is not complete',
+        'self-authority': 'Protected control change requires native owner approval bound to head and base',
+        'invalid-completion': 'Candidate completion requires completed prerequisites',
+        'stale-work': 'Backlog executor is not currently assigned',
+    }
+    cases = proof.get('work_cases')
+    if not isinstance(cases, dict) or set(cases) != set(reasons):
+        raise ProviderError('Complete native Backlog work proof cases required')
+    prefix = f'repos/{config["repository"]}'
+    result = {}
+    for name, reason in reasons.items():
+        case = cases[name]
+        sha = case['head']
+        if not re.fullmatch(r'[0-9a-f]{40}', sha):
+            raise ProviderError('Backlog proof subject malformed')
+        pull = api(f'{prefix}/pulls/{int(case["pr"])}')
+        if pull['head']['sha'] != sha or pull['base']['ref'] != config['target'] or pull.get('merged'):
+            raise ProviderError('Backlog rejection proof PR scope changed')
+        statuses = api(f'{prefix}/commits/{sha}/statuses?per_page=100')
+        matching = [s for s in statuses if s.get('context') == config['verification']['required_check']]
+        if not matching or len(statuses) >= 100:
+            raise ProviderError('Backlog proof status unavailable/truncated')
+        status = matching[0]
+        match = re.fullmatch(rf'https://github.com/{re.escape(config["repository"])}/actions/runs/(\d+)', status.get('target_url', ''))
+        if status.get('state') != 'failure' or status.get('creator', {}).get('login') != 'github-actions[bot]' or not match:
+            raise ProviderError('Backlog rejection proof producer invalid')
+        run = api(f'{prefix}/actions/runs/{match[1]}')
+        if run.get('event') != 'pull_request_target' or run.get('path') != WORKFLOW_PATH or run.get('head_sha') != sha or run.get('status') != 'completed':
+            raise ProviderError('Backlog proof did not use trusted native path')
+        baseline = executed_baseline(config, prefix, run, api, logs)
+        if (file_bytes(api, prefix, WORKFLOW_PATH, baseline).decode('utf-8').replace('\r\n', '\n') != workflow_text()
+                or json.loads(file_bytes(api, prefix, '.harness/config.json', baseline)) != config):
+            raise ProviderError('Historical Backlog proof substrate differs')
+        jobs = api(f'{prefix}/actions/runs/{int(run["id"])}/jobs?per_page=100')
+        if jobs.get('total_count') != len(jobs.get('jobs', [])):
+            raise ProviderError('Backlog verifier job observation incomplete')
+        failed = [job for job in jobs['jobs'] if job.get('name') == 'verify' and job.get('conclusion') == 'failure' and job.get('status') == 'completed']
+        failure_log = logs(f'{prefix}/actions/jobs/{int(failed[0]["id"])}/logs') if len(failed) == 1 else ''
+        if len(failed) != 1 or not re.search(r'^\S+[ \t]+ValueError: ' + re.escape(reason) + r'[ \t]*\r?$', failure_log, re.MULTILINE):
+            raise ProviderError('Native Backlog rejection reason unavailable')
+        denied = api(f'{prefix}/rulesets/rule-suites/{int(case["rule_suite_id"])}')
+        if denied.get('result') != 'fail' or denied.get('after_sha') != sha or denied.get('ref') != f'refs/heads/{config["target"]}':
+            raise ProviderError('Backlog invalid integration denial unavailable')
+        if name == 'stale-work':
+            accepted = api(f'{prefix}/actions/runs/{int(case["accepted_run"])}')
+            if (accepted.get('event') != 'pull_request_target' or accepted.get('path') != WORKFLOW_PATH
+                    or accepted.get('head_sha') != sha or accepted.get('conclusion') != 'success'
+                    or accepted.get('status') != 'completed'):
+                raise ProviderError('Prior legal Backlog acceptance unavailable')
+            previous = executed_baseline(config, prefix, accepted, api, logs)
+            if (json.loads(file_bytes(api, prefix, '.harness/config.json', previous)) != config
+                    or file_bytes(api, prefix, WORKFLOW_PATH, previous).decode('utf-8').replace('\r\n', '\n') != workflow_text()):
+                raise ProviderError('Prior Backlog acceptance configuration differs')
+            comparison = api(f'{prefix}/compare/{previous}...{baseline}')
+            if comparison.get('status') != 'ahead':
+                raise ProviderError('Canonical Backlog revocation ancestry unavailable')
+            old = read_corpus(config, previous, api)
+            new = read_corpus(config, baseline, api)
+            authorize(old, config['work'], case['task'], pull.get('user', {}).get('login'))
+            if previous == baseline or old['identity'] == new['identity']:
+                raise ProviderError('Canonical Backlog revocation was not observed')
+            try:
+                authorize(new, config['work'], case['task'], pull.get('user', {}).get('login'))
+            except ValueError:
+                pass
+            else:
+                raise ProviderError('Stale Backlog executor remains authorized')
+        result[name] = {'pr': pull['number'], 'head': sha, 'run_id': run['id'], 'baseline': baseline}
+    return result

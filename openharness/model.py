@@ -118,7 +118,8 @@ def evaluate(config, local, provider):
     observed = not provider.get('errors') and bool(provider.get('fingerprint'))
     gate = observed and provider.get('gate', False)
     resolve('applicability', True, 'Fixed profile evaluates all 16 candidates; unknown applicability blocks closure', 'catalogue completeness', ['profile', 'envelope'])
-    resolve('authority', installed and observed and local.get('authority_matches_origin', False), 'Exact semantic authority map plus live repository and origin identity required', 'declared semantic mapping; privileged policy operators trusted', ['authorities', 'provider_identity', 'origin'])
+    work_observed = config['profile'] != 'github-backlog-v1' or provider.get('work_authority', {}).get('valid') is True
+    resolve('authority', installed and observed and work_observed and local.get('authority_matches_origin', False), 'Exact semantic authority map plus live repository, origin and configured work corpus required', 'declared semantic mapping; privileged policy operators trusted', ['authorities', 'provider_identity', 'origin', 'work'])
     topology = config['envelope']['workspace_writers']
     single = topology == 'single' and 'local-executor' in config['envelope']['trusted_actors']
     for name in ('concurrency', 'fencing'):

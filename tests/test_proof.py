@@ -78,3 +78,12 @@ class ProofTests(unittest.TestCase):
     def test_wrong_executed_source_or_expired_native_log_blocks(self):
         self.assertFalse(observe_proof(self.config, self.observation, self.api, lambda _: '')['valid'])
         self.assertFalse(observe_proof(self.config, self.observation, self.api, lambda _: self.logs('').replace('a' * 40, 'f' * 40))['valid'])
+
+    def test_backlog_profile_cannot_reuse_issue_only_deployment_proof(self):
+        from tests.test_backlog import settings
+        self.config['profile'] = 'github-backlog-v1'
+        self.config['work'] = settings()
+        self.config['authorities']['work'] = 'repository-backlog'
+        result = observe_proof(self.config, self.observation, self.api, self.logs)
+        self.assertFalse(result['valid'])
+        self.assertIn('Backlog work proof cases', result['reason'])

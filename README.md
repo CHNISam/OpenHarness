@@ -15,7 +15,9 @@ Requires Python 3.11+, Git 2.38+ (`merge-tree --write-tree`), and authenticated
 [GitHub CLI](https://cli.github.com/manual/gh_auth_login) with read access to repository
 metadata, Issues, workflows, contents and enforcement configuration. Permission errors
 are unresolved observations. This version supports `github.com` and the
-`github-pr-v1` profile. Windows and POSIX native process locks are supported.
+`github-pr-v1` profile, plus the bounded [canonical Backlog profile](docs/backlog-profile.md)
+when its separate producer and native deployment proof are installed. Windows and
+POSIX native process locks are supported.
 
 ```sh
 python -m venv .venv
@@ -104,6 +106,11 @@ does not install or activate OpenHarness and is not a repository guarantee; use
 the project-local instructions and current `entry`/`doctor` results for authority.
 
 ## Supported execution envelope
+
+The separate `github-backlog-v1` adapter keeps canonical Backlog task files as the
+sole work authority, with explicit executor mapping and immutable task/dependency
+reads. It does not migrate this repository's Issue authority. Read its exact supported
+format and deployment boundaries before adoption in the [profile guide](docs/backlog-profile.md).
 
 The default topology trusts one executor writer per workspace. Administrators and
 CI maintainers are trusted substrate operators. Arbitrary local writes and privileged

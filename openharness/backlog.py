@@ -3,6 +3,7 @@
 import hashlib
 import json
 import re
+import base64
 
 from .model import digest
 
@@ -122,7 +123,10 @@ def parse_task(data):
         if not match or match[1] not in FIELDS or match[1] in fields:
             raise ValueError('Unsupported or duplicate Backlog frontmatter field')
         key, value = match[1], match[2] or ''
-        fields[key] = flow_list(value) if key in LISTS and value else ([] if key in LISTS else scalar(value))
+        if key == 'assignee' and value and not value.startswith('['):
+            fields[key] = [scalar(value)]
+        else:
+            fields[key] = flow_list(value) if key in LISTS and value else ([] if key in LISTS else scalar(value))
         current = key if key in LISTS and not value else None
     if not {'id', 'title', 'status', 'assignee', 'dependencies'} <= fields.keys():
         raise ValueError('Backlog authority fields are required')
@@ -197,3 +201,75 @@ def authorize(observation, work, identifier, actor):
         complete(dependency)
     return {'id': identifier, 'title': task['title'], 'status': task['status'],
             'actor': executor, 'identity': observation['identity'], 'dependencies': sorted(checked)}
+
+
+def corpus_entries(entries, work):
+    """Select the declared corpus, rejecting special files and ambiguous layouts."""
+    if not isinstance(entries, list):
+        raise ValueError('Complete Backlog tree unavailable')
+    selected, seen = {}, set()
+    directories = work['directories']
+    ancestors = {folder.rsplit('/', i)[0] for folder in directories for i in range(1, folder.count('/') + 1)}
+    for item in entries:
+        path = item.get('path')
+        if not isinstance(path, str) or path in seen:
+            raise ValueError('Malformed or duplicate immutable tree path')
+        seen.add(path)
+        inside = any(path.startswith(folder + '/') for folder in directories)
+        if path in ancestors or path in directories:
+            if item.get('type') != 'tree' or item.get('mode') != '040000':
+                raise ValueError('Backlog corpus ancestor must be a regular Git tree')
+        elif inside and item.get('type') != 'tree':
+            if item.get('type') != 'blob' or item.get('mode') not in ('100644', '100755'):
+                raise ValueError('Backlog corpus must contain regular files')
+            if path.endswith('.md') and path.rsplit('/', 1)[1].lower() != 'readme.md':
+                if not re.fullmatch(r'[0-9a-f]{40}', item.get('sha', '')):
+                    raise ValueError('Backlog immutable blob identity missing')
+                selected[path] = item['sha']
+    if not selected or len(selected) > 500:
+        raise ValueError('Complete bounded Backlog corpus required (1..500 tasks)')
+    return selected
+
+
+def read_corpus(config, revision, api):
+    if not isinstance(revision, str) or not re.fullmatch(r'[0-9a-f]{40}', revision):
+        raise ValueError('Backlog reads require an immutable canonical revision')
+    prefix = f'repos/{config["repository"]}'
+    tree = api(f'{prefix}/git/trees/{revision}?recursive=1')
+    if not isinstance(tree, dict) or tree.get('truncated') is not False:
+        raise ValueError('Complete immutable Backlog tree unavailable')
+    selected = corpus_entries(tree.get('tree'), config['work'])
+    files = {}
+    for path, sha in selected.items():
+        blob = api(f'{prefix}/git/blobs/{sha}')
+        if not isinstance(blob, dict) or blob.get('sha') != sha or blob.get('encoding') != 'base64':
+            raise ValueError('Immutable Backlog blob unavailable')
+        try:
+            data = base64.b64decode(''.join(blob['content'].split()), validate=True)
+        except (ValueError, KeyError, TypeError, AttributeError) as exc:
+            raise ValueError('Malformed Backlog blob bytes') from exc
+        actual = hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
+        if actual != sha:
+            raise ValueError('Immutable Backlog blob identity mismatch')
+        files[path] = data
+    return {**corpus(files, config['work']), 'revision': revision}
+
+
+def local_corpus(repo, revision, work):
+    """Read committed task bytes, never candidate-controlled working files."""
+    import subprocess
+    entries = []
+    for row in repo.git('ls-tree', '-r', '-t', '-z', revision).split('\0'):
+        if not row:
+            continue
+        metadata, path = row.split('\t', 1)
+        mode, kind, sha = metadata.split(' ')
+        entries.append({'path': path, 'mode': mode, 'type': kind, 'sha': sha})
+    selected = corpus_entries(entries, work)
+    files = {}
+    for path, sha in selected.items():
+        result = subprocess.run(['git', '-C', str(repo.root), 'cat-file', 'blob', sha], capture_output=True, timeout=60)
+        if result.returncode:
+            raise ValueError('Committed Backlog blob unavailable')
+        files[path] = result.stdout
+    return {**corpus(files, work), 'revision': revision}

@@ -1,4 +1,3 @@
-import copy
 import unittest
 
 from openharness.backlog import authorize, corpus, parse_task, validate_work
@@ -50,6 +49,7 @@ class BacklogTests(unittest.TestCase):
         block = parse_task(task(assignee="\n  - '@alice'", dependencies='[]').replace(b'\n', b'\r\n'))
         self.assertEqual(inline, block)
         self.assertEqual(['@alice'], inline['assignee'])
+        self.assertEqual(['@alice'], parse_task(task(assignee='@alice'))['assignee'])
 
     def test_quoted_strings_do_not_create_fields_or_yaml_objects(self):
         data = task().replace(b'title: Example', b'title: "Example: # text"')
