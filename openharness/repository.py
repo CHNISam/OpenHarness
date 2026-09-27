@@ -138,6 +138,9 @@ class Repository:
         try:
             installation = installation_observation(self)
             installation_error = None
+            if installation and installation.get('project_artifacts'):
+                runtime_entry = safe_path(self.root, '.harness/runtime-entry.md')
+                installed = bool(all(controls.values()) and runtime_entry.is_file() and runtime_entry.read_text(encoding='utf-8') == entry_text(self.config()) and '.harness/AGENT.md' in agents.read_text(encoding='utf-8'))
         except (ValueError, KeyError, TypeError) as exc:
             installation, installation_error = None, str(exc)
             installed = False

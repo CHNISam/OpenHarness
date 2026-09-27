@@ -12,10 +12,13 @@ from urllib.parse import quote
 
 from . import __version__
 from .provider import gh_api
-from .repository import Repository, ENTRY, json_text, safe_path
+from .repository import Repository, ENTRY, BACKLOG_ENTRY, json_text, safe_path
 
 INSTALLATION = '.harness/installation.json'
 REQUEST = '.harness/upgrade-request.json'
+RUNTIME_ENTRY = '.harness/runtime-entry.md'
+ADOPTION = '.harness/adoption.json'
+MIGRATION = 'legacy-backlog-adoption-v1'
 ARTIFACTS = {'.harness/AGENT.md', '.harness/github-workflow.yml.template',
              '.github/workflows/openharness.yml'}
 SHA = re.compile(r'[0-9a-f]{40}')
@@ -37,7 +40,9 @@ def manifest(compatible_from):
     from .ci import workflow_text
     for previous in compatible_from:
         version(previous)
-    return {'schema': 1, 'version': __version__, 'profile': 'github-pr-v1',
+    return {'schema': 2, 'version': __version__, 'profile': 'github-pr-v1',
+            'profiles': {'github-pr-v1': ENTRY, 'github-backlog-v1': BACKLOG_ENTRY},
+            'migrations': [MIGRATION],
             'compatible_from': sorted(set(compatible_from)),
             'artifacts': {'.harness/AGENT.md': ENTRY,
                           '.harness/github-workflow.yml.template': workflow_text(),
@@ -45,9 +50,12 @@ def manifest(compatible_from):
 
 
 def validate_manifest(data, selected):
-    if not isinstance(data, dict) or set(data) != {'schema', 'version', 'profile', 'compatible_from', 'artifacts'}:
+    fields = {'schema', 'version', 'profile', 'compatible_from', 'artifacts'}
+    if isinstance(data, dict) and data.get('schema') == 2:
+        fields |= {'profiles', 'migrations'}
+    if not isinstance(data, dict) or set(data) != fields:
         raise ValueError('Invalid release manifest')
-    if data['schema'] != 1 or data['profile'] != 'github-pr-v1' or data['version'] != selected:
+    if data['schema'] not in (1, 2) or data['profile'] != 'github-pr-v1' or data['version'] != selected:
         raise ValueError('Unsupported release schema/profile or mismatched version')
     version(selected)
     if not isinstance(data['compatible_from'], list):
@@ -56,15 +64,34 @@ def validate_manifest(data, selected):
         version(previous)
     if not isinstance(data['artifacts'], dict) or set(data['artifacts']) != ARTIFACTS:
         raise ValueError('Release must contain exactly the supported generated artifacts')
-    if not all(isinstance(text, str) and text and len(text.encode()) <= 100_000
-               for text in data['artifacts'].values()):
+    texts = list(data['artifacts'].values())
+    if data['schema'] == 2:
+        profiles = data['profiles']
+        if not isinstance(profiles, dict) or set(profiles) != {'github-pr-v1', 'github-backlog-v1'} or profiles['github-pr-v1'] != data['artifacts']['.harness/AGENT.md'] or data['migrations'] != [MIGRATION]:
+            raise ValueError('Unsupported release profiles or migration protocol')
+        texts += list(profiles.values())
+    if not all(isinstance(text, str) and text and len(text.encode()) <= 100_000 for text in texts):
         raise ValueError('Invalid generated artifact content')
     return data
 
 
+def release_artifacts(release, profile, preserved=False):
+    data = validate_manifest(release['manifest'], release['version'])
+    result = dict(data['artifacts'])
+    if profile != 'github-pr-v1':
+        if data['schema'] != 2 or profile not in data['profiles']:
+            raise ValueError('Release does not support installed profile')
+        result['.harness/AGENT.md'] = data['profiles'][profile]
+    if preserved:
+        result[RUNTIME_ENTRY] = result.pop('.harness/AGENT.md')
+    return result
+
+
 def validate_installation(data, config):
     fields = {'schema', 'repository', 'version', 'revision', 'artifacts'}
-    if not isinstance(data, dict) or set(data) != fields or data['schema'] != 1:
+    if isinstance(data, dict) and data.get('schema') == 2:
+        fields |= {'profile', 'project_artifacts', 'adoption'}
+    if not isinstance(data, dict) or set(data) != fields or data['schema'] not in (1, 2):
         raise ValueError('Invalid installation identity')
     version(data['version'])
     if not isinstance(data['repository'], str) or not SOURCE.fullmatch(data['repository']):
@@ -75,9 +102,19 @@ def validate_installation(data, config):
     if config['verification'].get('controller') != expected:
         raise ValueError('Installed release and runtime controller pin differ')
     hashes = data['artifacts']
-    if not isinstance(hashes, dict) or not {'.harness/AGENT.md', '.harness/github-workflow.yml.template'} <= set(hashes) or set(hashes) - ARTIFACTS:
+    preserved = data.get('project_artifacts', {})
+    if data['schema'] == 2:
+        if data['profile'] != config['profile'] or not isinstance(preserved, dict) or (preserved and set(preserved) != {'.harness/AGENT.md', 'AGENTS.md'}):
+            raise ValueError('Invalid installed profile/project ownership')
+        if (preserved and (config['profile'] != 'github-backlog-v1' or not isinstance(data['adoption'], str) or not re.fullmatch(r'[0-9a-f]{64}', data['adoption']))) or (not preserved and data['adoption'] is not None):
+            raise ValueError('Explicit adoption provenance required')
+    elif config['profile'] != 'github-pr-v1':
+        raise ValueError('Legacy release identity does not support Backlog')
+    entry = RUNTIME_ENTRY if preserved else '.harness/AGENT.md'
+    supported = (ARTIFACTS - {'.harness/AGENT.md'} | {RUNTIME_ENTRY}) if preserved else ARTIFACTS
+    if not isinstance(hashes, dict) or not {entry, '.harness/github-workflow.yml.template'} <= set(hashes) or set(hashes) - supported:
         raise ValueError('Invalid installed generated artifact set')
-    if not all(isinstance(value, str) and re.fullmatch(r'[0-9a-f]{64}', value) for value in hashes.values()):
+    if not all(isinstance(value, str) and re.fullmatch(r'[0-9a-f]{64}', value) for value in [*hashes.values(), *preserved.values()]):
         raise ValueError('Invalid generated artifact hashes')
     return data
 
@@ -159,6 +196,13 @@ def plan(config, installed, release, read, *, rollback=False):
     if not controller or release['repository'] != controller['repository']:
         raise ValueError('Upgrade source must remain the project trusted controller repository')
     validate_manifest(release['manifest'], release['version'])
+    project = installed.get('project_artifacts', {}) if installed else {}
+    if project and content_hash(read(ADOPTION) or '') != installed['adoption']:
+        raise ValueError('Reviewed adoption declaration drift')
+    artifacts = release_artifacts(release, config['profile'], bool(project))
+    for path in project:
+        if read(path) is None:
+            raise ValueError(f'Project-owned instruction missing: {path}')
     if not SHA.fullmatch(release['revision']):
         raise ValueError('Upgrade revision must be an immutable SHA')
     if installed is None:
@@ -182,10 +226,10 @@ def plan(config, installed, release, read, *, rollback=False):
     changes, hashes = {}, {}
     for path in sorted(paths):
         old = read(path)
-        expected = (installed['artifacts'][path] if installed else content_hash(release['manifest']['artifacts'][path]))
+        expected = (installed['artifacts'][path] if installed else content_hash(artifacts[path]))
         if old is None or content_hash(old) != expected:
             raise ValueError(f'Project-owned/generated artifact conflict: {path}; no files changed')
-        new = release['manifest']['artifacts'][path]
+        new = artifacts[path]
         hashes[path] = content_hash(new)
         if old.replace('\r\n', '\n') != new.replace('\r\n', '\n'):
             changes[path] = new
@@ -195,6 +239,8 @@ def plan(config, installed, release, read, *, rollback=False):
         changes['.harness/config.json'] = json_text(proposed)
     identity = {'schema': 1, 'repository': release['repository'], 'version': release['version'],
                 'revision': release['revision'], 'artifacts': hashes}
+    if release['manifest']['schema'] == 2:
+        identity.update(schema=2, profile=config['profile'], project_artifacts=project, adoption=installed.get('adoption') if installed else None)
     for path, text in ((INSTALLATION, json_text(identity)), (REQUEST, json_text({'version': release['version']}))):
         if read(path) != text:
             changes[path] = text
@@ -252,6 +298,14 @@ def installation_observation(repo):
         request = json.loads(read(REQUEST) or '{}')
         if request != {'version': data['version']}:
             raise ValueError('Upgrade request is not materialized in the installed release')
+        if data.get('project_artifacts'):
+            if content_hash(read(ADOPTION) or '') != data['adoption']:
+                raise ValueError('Reviewed adoption declaration changed')
+        # Project ownership records the reviewed adoption snapshot, not a content lock.
+        # Later project edits use normal control approval and invalidate Doctor controls.
+        for path in data.get('project_artifacts', {}):
+            if read(path) is None:
+                raise ValueError(f'Project-owned instruction missing: {path}')
         for path, expected in data['artifacts'].items():
             text = read(path)
             if text is None or content_hash(text) != expected:
@@ -259,19 +313,29 @@ def installation_observation(repo):
     return data
 
 
-def renovate_config(repository, issue):
-    if not SOURCE.fullmatch(repository) or type(issue) is not int or issue <= 0:
-        raise ValueError('Trusted source and positive existing upgrade Issue required')
+def renovate_config(repository, issue=None, task=None):
+    if not SOURCE.fullmatch(repository) or (issue is None) == (task is None):
+        raise ValueError('Trusted source and exactly one existing upgrade work item required')
+    if task is not None:
+        from .backlog import task_id
+        reference = task_id(task)
+        branch_prefix = f'codex/backlog-{reference}-'
+        work_line = f'Work-Item: {reference}'
+    else:
+        if type(issue) is not int or issue <= 0:
+            raise ValueError('Positive existing upgrade Issue required')
+        branch_prefix = f'codex/{issue}-'
+        work_line = f'Work-Item: #{issue}'
     return {'dependencyDashboard': False, 'customManagers': [{'customType': 'regex', 'managerFilePatterns': ['/\\.harness/upgrade-request\\.json$/'],
              'matchStrings': ['"version"\\s*:\\s*"(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)"'],
              'datasourceTemplate': 'github-releases', 'depNameTemplate': repository,
              'versioningTemplate': 'semver', 'extractVersionTemplate': '^v(?<version>.*)$'}],
             'packageRules': [{'matchManagers': ['custom.regex'], 'matchDepNames': [repository],
                 'automerge': False, 'ignoreUnstable': True,
-                'branchPrefix': f'codex/{issue}-', 'branchTopic': 'openharness-{{{newMajor}}}-{{{newMinor}}}-{{{newPatch}}}',
-                'prBodyNotes': [f'Work-Item: #{issue}', 'Owner approval on exact head/base and fresh deployment proof are required.'],
+                'branchPrefix': branch_prefix, 'branchTopic': 'openharness-{{{newMajor}}}-{{{newMinor}}}-{{{newPatch}}}',
+                'prBodyNotes': [work_line, 'Owner approval on exact head/base and fresh deployment proof are required.'],
                 'postUpgradeTasks': {'commands': ['openharness-upgrade-prepare'], 'executionMode': 'branch',
-                    'fileFilters': [INSTALLATION, REQUEST, '.harness/config.json', *sorted(ARTIFACTS)]}}]}
+                    'fileFilters': [INSTALLATION, REQUEST, '.harness/config.json', *sorted(ARTIFACTS), RUNTIME_ENTRY]}}]}
 
 
 def prepare(repo, api=gh_api):
@@ -318,6 +382,10 @@ def validate_candidate(repo, base, api=gh_api):
     original = json.loads(original_text) if original_text is not None else None
     current = installed(repo)
     if original is None:
+        if current is not None and current.get('adoption'):
+            from .adoption import validate_candidate as validate_adoption
+            validate_adoption(repo, base, api)
+            return
         if current is None:
             return
         release = Releases(config['verification']['controller']['repository'], api).resolve(current['version'])
@@ -346,8 +414,10 @@ def validate_candidate(repo, base, api=gh_api):
         if not known:
             raise ValueError('Rollback identity must have been installed on canonical first-parent ancestry')
     expected = plan(config, original, release, baseline, rollback=rollback)
+    if original.get('project_artifacts') and repo.git('diff', '--name-only', '--no-renames', base, '--', *sorted(original['project_artifacts'])):
+        raise ValueError('Upgrade must preserve baseline project instruction bytes/modes')
     read = read_files(repo)
-    for path in {INSTALLATION, REQUEST, '.harness/config.json', *original['artifacts']}:
+    for path in {INSTALLATION, REQUEST, '.harness/config.json', *original['artifacts'], *original.get('project_artifacts', {}), ADOPTION}:
         wanted = expected['changes'].get(path, baseline(path))
         if read(path) != wanted:
             raise ValueError(f'Upgrade candidate differs from verified migration: {path}')
@@ -364,14 +434,24 @@ def main():
     release.add_argument('--compatible-from', action='append', default=[])
     preset = sub.add_parser('renovate')
     preset.add_argument('--source', required=True)
-    preset.add_argument('--issue', type=int, required=True)
+    work_item = preset.add_mutually_exclusive_group(required=True)
+    work_item.add_argument('--issue', type=int)
+    work_item.add_argument('--task')
+    adoption = sub.add_parser('adoption-plan')
+    adoption.add_argument('--repo', default='.')
+    adoption.add_argument('--work-config', required=True)
     discovery = sub.add_parser('discover')
     discovery.add_argument('--repo', default='.')
     args = parser.parse_args()
     if args.action == 'manifest':
         output = manifest(args.compatible_from)
     elif args.action == 'renovate':
-        output = renovate_config(args.source, args.issue)
+        output = renovate_config(args.source, args.issue, args.task)
+    elif args.action == 'adoption-plan':
+        from .adoption import declaration
+        repo = Repository(args.repo)
+        work = json.loads(safe_path(repo.root, args.work_config).read_text(encoding='utf-8'))
+        output = declaration(repo.config(), work, read_files(repo))
     else:
         identity = installed(Repository(args.repo))
         if identity is None:

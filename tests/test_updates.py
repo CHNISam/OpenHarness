@@ -43,6 +43,11 @@ class ReleaseAPI:
 
 class UpgradeTests(unittest.TestCase):
     def setUp(self):
+        # These historical propagation fixtures execute the old pinned 0.2.1 preparer.
+        if self._testMethodName != 'test_committed_manifest_matches_compiler_and_package_version':
+            pinned = patch('openharness.updates.__version__', '0.2.1')
+            pinned.start()
+            self.addCleanup(pinned.stop)
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = make_repo(self.temp.name)
@@ -262,7 +267,7 @@ class UpgradeTests(unittest.TestCase):
     def test_committed_manifest_matches_compiler_and_package_version(self):
         producer = Path(__file__).resolve().parents[1]
         data = json.loads((producer / 'openharness-release.json').read_bytes())
-        self.assertEqual(updates.manifest(['0.2.0']), data)
+        self.assertEqual(updates.manifest([]), data)
         import tomllib
         package = tomllib.loads((producer / 'pyproject.toml').read_text())
         self.assertEqual(data['version'], package['project']['version'])

@@ -254,6 +254,14 @@ class Runtime:
     def entry(self):
         config = self.repo.config()
         state = self.state()
+        instructions = ['AGENTS.md', '.harness/AGENT.md']
+        from .updates import installation_observation, RUNTIME_ENTRY
+        try:
+            identity = installation_observation(self.repo)
+            if identity and identity.get('project_artifacts'):
+                instructions.append(RUNTIME_ENTRY)
+        except (ValueError, KeyError, TypeError):
+            pass  # Doctor preserves the exact installation gap below.
         try:
             work = self.provider.list_work(config)
             work_error = None
@@ -261,6 +269,7 @@ class Runtime:
             work, work_error = [], str(exc)
         return {
             'config': str(self.repo.root / '.harness/config.json'), 'authorities': config['authorities'],
+            'instruction_paths': instructions,
             'work_url': (f'https://github.com/{config["repository"]}/tree/{config["target"]}/' + config['work']['directories'][0]
                          if config['profile'] == 'github-backlog-v1' else f'https://github.com/{config["repository"]}/issues'), 'legal_work': work,
             'work_discovery_error': work_error, 'lifecycle': state['lifecycle'],
@@ -328,6 +337,24 @@ class Runtime:
         record = self.read(f'evidence/{cid}.json', None)
         valid = isinstance(record, dict) and record.get('candidate') == candidate and record.get('candidate_id') == cid and record.get('passed') is True
         return {'candidate_id': cid, 'fresh': valid, 'record': record, 'authorizes_integration': False}
+
+    def adopt_backlog(self, release):
+        from .adoption import proposal
+        from .updates import apply
+        with self.locked():
+            state = self.state()
+            if state['lifecycle'] != 'GENESIS':
+                # This is explicit installer adoption, not an authority-changing shortcut
+                # for an active repository. Managed profile changes need their own proof.
+                raise ValueError('Legacy Backlog adoption requires unactivated Genesis installation')
+            result = proposal(self.repo, release, self.provider.api)
+            if not result['changes']:
+                return result
+            state.update(lifecycle='GENESIS', substrate=None)
+            state.setdefault('events', []).append({'time': now(), 'transition': 'ADOPTION_STAGE', 'version': release})
+            self.save_state(state)
+            apply(self.repo, result['changes'])
+            return result
 
     def upgrade(self, release=None, enroll=False):
         with self.locked():
