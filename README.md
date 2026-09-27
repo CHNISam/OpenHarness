@@ -287,10 +287,12 @@ GitHub source semantics: [rules and sourced checks](https://docs.github.com/en/r
 
 ## Current native validation
 
-See [live deployment record](docs/native-deployment-validation.md) and the canonical
-`.harness/deployment-proof.json`. The independently installed v0.2 tool has activated
-this repository's configured profile; `entry`/`doctor` must still revalidate its current
-state. There are no remaining bootstrap implementation todos for that profile.
+See the [repaired producer deployment record](docs/native-boundary-validation.md)
+and canonical `.harness/deployment-proof.json`. The independently installed v0.3.0
+tool from reviewed source has activated this repository's configured profile;
+the post-activation live audit established 14 guarantees, with 2 not applicable
+under the trusted single-writer scope. `entry`/`doctor` must still revalidate current
+state. The [earlier deployment record](docs/native-deployment-validation.md) is historical.
 
 The conservative adapter requires repository Actions enabled, one canonical trusted
 workflow and the native all-workflow event policy. It supports `allowed_actions: all`
