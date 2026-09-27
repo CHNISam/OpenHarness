@@ -27,16 +27,18 @@ Execute docs/plans/2026-09-27-boundary-hardening.md sequentially. Preserve froze
 
 ## Acceptance Criteria
 
-- [ ] Lossless machine path parsing and real Git approval regressions.
-- [ ] Context-bound publication and merge subject/race regressions.
-- [ ] Observation reuse, mutable freshness and structured renewal diagnostics.
-- [ ] Compatibility and deployment acceptance/runbook documentation.
-- [ ] Full unittest and compileall validation.
+- [x] Lossless machine path parsing and real Git approval regressions.
+- [x] Context-bound publication and merge subject/race regressions.
+- [x] Observation reuse, mutable freshness and structured renewal diagnostics.
+- [x] Compatibility and deployment acceptance/runbook documentation.
+- [x] Full unittest and compileall validation.
 - [ ] Native PR checks; changed producer deployment and fresh proof recorded separately.
 
 ## Work Log
 
 2026-09-27: User approved full remediation and requested lightweight implementation. Opened Issue #36. Independent live Doctor observed existing old-producer closure; created normal managed workspace after a transient observation rejection.
+
+2026-09-27: 160 tests, 159 passed, one Windows permission skip; compileall and diff checks passed. Added 13 regression tests with no runtime dependency. Native acceptance and producer deployment remain separate next steps.
 
 ## Resources
 

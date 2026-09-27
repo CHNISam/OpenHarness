@@ -1,4 +1,5 @@
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -24,6 +25,25 @@ class RepositoryTests(unittest.TestCase):
         self.assertTrue(self.repo.local()['installed'])
         (self.root / 'AGENTS.md').write_text('Different controls\n', encoding='utf-8')
         self.assertNotEqual(original, self.repo.local()['controls'])
+
+    def test_machine_paths_preserve_git_names_without_filesystem_checkout(self):
+        # Git permits names Windows cannot materialize. Populate objects directly
+        # so CR/LF, quotes and undecodable bytes are exercised on both platforms.
+        paths = [b' leading ', b'quote".yml', b'line\r\nbreak',
+                 '测试.py'.encode('utf-8'), b'odd-\xff', b'trailing\n']
+        blob = git(self.root, 'rev-parse', 'HEAD:file.txt')
+        records = b''.join(b'100644 blob ' + blob.encode() + b'\t' + path + b'\0' for path in paths + [b'file.txt'])
+        result = subprocess.run(['git', '-C', str(self.root), 'mktree', '-z'],
+                                input=records, capture_output=True)
+        self.assertEqual(0, result.returncode, result.stderr)
+        tree = result.stdout.decode().strip()
+        commit = git(self.root, 'commit-tree', tree, '-p', 'HEAD', '-m', 'unusual Git paths')
+        git(self.root, 'update-ref', 'HEAD', commit)
+        actual = self.repo.git_paths('ls-tree', '-r', '--name-only', '-z', 'HEAD')
+        self.assertEqual(set(paths + [b'file.txt']), {path.encode('utf-8', 'surrogateescape') for path in actual})
+        changed = self.repo.git_paths('diff', '--name-only', '--no-renames', '-z', 'HEAD^', 'HEAD')
+        self.assertEqual(set(paths), {path.encode('utf-8', 'surrogateescape') for path in changed})
+        self.assertEqual([], self.repo.git_paths('diff', '--name-only', '-z', 'HEAD', 'HEAD'))
 
     def test_install_is_repeatable_and_preserves_existing_instructions(self):
         (self.root / 'AGENTS.md').write_text('Project preferences.\n', encoding='utf-8')

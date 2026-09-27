@@ -1,8 +1,11 @@
 """Read-only native GitHub observation. Unobservable is never equivalent to absent."""
 
 import base64
+import copy
 import json
+import re
 import subprocess
+import time
 from urllib.parse import quote
 
 from .model import digest
@@ -10,6 +13,25 @@ from .model import digest
 
 class ProviderError(ValueError):
     pass
+
+
+def observation_reader(api):
+    """Reuse immutable objects within one audit; mutable authority is always read live."""
+    cache, cost = {}, {'requests': 0, 'reused': 0}
+    immutable = re.compile(r'repos/[^/]+/[^/]+/(?:contents/[^?]+\?ref=[0-9a-f]{40}'
+                           r'|git/(?:commits|blobs)/[0-9a-f]{40}'
+                           r'|git/trees/[0-9a-f]{40}(?:\?recursive=1)?)')
+    def read(path):
+        reusable = isinstance(path, str) and immutable.fullmatch(path)
+        if reusable and path in cache:
+            cost['reused'] += 1
+            return copy.deepcopy(cache[path])
+        cost['requests'] += 1
+        value = api(path)
+        if reusable:
+            cache[path] = copy.deepcopy(value)
+        return value
+    return read, cost
 
 
 def gh_write(path, method, payload):
@@ -109,6 +131,9 @@ class GitHub:
         return {'check': check['id'], 'run': run['id'], 'attempt': run['run_attempt'], 'head': head}
 
     def observe(self, config):
+        started = time.monotonic()
+        api, cost = observation_reader(self.api)
+        cost['log_requests'] = 0
         prefix = f'repos/{config["repository"]}'
         target = quote(config['target'], safe='')
         raw, errors = {}, []
@@ -119,13 +144,13 @@ class GitHub:
             ('workflows', f'{prefix}/actions/workflows?per_page=100'),
         ):
             try:
-                raw[key] = self.api(path)
+                raw[key] = api(path)
             except (ProviderError, ValueError, TypeError) as exc:
                 errors.append(f'{key}: {exc}')
         details = []
         try:
             path = f'{prefix}/rulesets?includes_parents=true&per_page=100'
-            summaries = self.api(path)
+            summaries = api(path)
             if not isinstance(summaries, list):
                 raise ProviderError('Expected ruleset list')
             # Conservative limit: do not mistake a truncated topology for completeness.
@@ -140,7 +165,7 @@ class GitHub:
                     detail_path = f'orgs/{source}/rulesets/{int(summary["id"])}'
                 else:
                     raise ProviderError(f'Unsupported inherited ruleset source: {source_type}')
-                detail = self.api(detail_path)
+                detail = api(detail_path)
                 if not isinstance(detail, dict) or 'bypass_actors' not in detail:
                     raise ProviderError('Ruleset bypass policy not observable')
                 details.append(detail)
@@ -158,7 +183,7 @@ class GitHub:
             sha = raw.get('branch', {}).get('commit', {}).get('sha')
             if not sha:
                 raise ProviderError('Missing workflow target revision')
-            tree = self.api(f'{prefix}/git/trees/{sha}?recursive=1')
+            tree = api(f'{prefix}/git/trees/{sha}?recursive=1')
             if not isinstance(tree.get('tree'), list) or tree.get('truncated'):
                 raise ProviderError('Canonical workflow tree incomplete')
             for item in tree['tree']:
@@ -173,13 +198,13 @@ class GitHub:
                 for w in workflows.get('workflows', []) if w.get('path') in raw['workflow_blobs']]}
         except (ProviderError, ValueError, KeyError, TypeError) as exc:
             errors.append(f'canonical workflow tree: {exc}')
-        from .native import observe_controller, observe_proof
-        observe_controller(config, raw, self.api, errors)
+        from .native import observe_controller, observe_proof, proof_gap, job_log
+        observe_controller(config, raw, api, errors)
         work_authority = None
         if config['profile'] == 'github-backlog-v1':
             from .backlog import read_corpus
             try:
-                work = read_corpus(config, raw.get('branch', {}).get('commit', {}).get('sha'), self.api)
+                work = read_corpus(config, raw.get('branch', {}).get('commit', {}).get('sha'), api)
                 work_authority = {'valid': True, 'revision': work['revision'], 'identity': work['identity']}
             except (ValueError, TypeError, KeyError) as exc:
                 errors.append(f'backlog work authority: {exc}')
@@ -187,8 +212,25 @@ class GitHub:
         observation = summarize(config, raw, errors)
         if work_authority is not None:
             observation['work_authority'] = work_authority
-        observation['deployment_proof'] = observe_proof(config, observation, self.api)
+        def logs(path):
+            cost['log_requests'] += 1
+            return job_log(path)
+        proof = observe_proof(config, observation, api, logs)
+        # Do not let an audit straddling a target move authorize an old snapshot.
+        # This ref read is deliberately mutable and never served from cache.
+        try:
+            final = api(f'{prefix}/branches/{target}')['commit']['sha']
+            if final != observation['target_sha']:
+                raise ProviderError('Canonical target changed during observation; retry the complete audit')
+        except (ProviderError, ValueError, KeyError, TypeError) as exc:
+            errors.append(f'final target observation: {exc}')
+            observation = summarize(config, raw, errors)
+            if work_authority is not None:
+                observation['work_authority'] = work_authority
+            proof = proof_gap(str(exc), 'freshness')
+        observation['deployment_proof'] = proof
         observation['deployment_proven'] = observation['deployment_proof']['valid']
+        observation['observation_cost'] = {**cost, 'elapsed_seconds': round(time.monotonic() - started, 3)}
         return observation
 
     def work(self, config, issue):

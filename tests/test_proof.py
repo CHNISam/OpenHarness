@@ -76,7 +76,11 @@ class ProofTests(unittest.TestCase):
         return '2026-09-26T09:11:22Z   ref: ' + 'b' * 40 + '\n2026-09-26T09:11:23Z   ref: ' + 'a' * 40 + '\n'
 
     def test_wrong_executed_source_or_expired_native_log_blocks(self):
-        self.assertFalse(observe_proof(self.config, self.observation, self.api, lambda _: '')['valid'])
+        result = observe_proof(self.config, self.observation, self.api, lambda _: '')
+        self.assertFalse(result['valid'])
+        self.assertEqual('valid', result['phase'])
+        self.assertEqual('docs/proof-recovery.md', result['recovery']['guide'])
+        self.assertFalse(result['recovery']['automatic_activation'])
         self.assertFalse(observe_proof(self.config, self.observation, self.api, lambda _: self.logs('').replace('a' * 40, 'f' * 40))['valid'])
 
     def test_backlog_profile_cannot_reuse_issue_only_deployment_proof(self):

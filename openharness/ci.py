@@ -183,6 +183,8 @@ def baseline_config(path):
 def current_context(config, event, api=gh_api):
     prefix = f'repos/{config["repository"]}'
     pull = api(f'{prefix}/pulls/{int(event["pull_request"]["number"])}')
+    if pull.get('number') != int(event['pull_request']['number']):
+        raise ValueError('Observed PR identity differs from the provider event')
     live = api(f'{prefix}/branches/{config["target"]}')['commit']['sha']
     reference = work_reference(config, pull)
     if config['profile'] == 'github-backlog-v1':
@@ -214,8 +216,9 @@ def control_change(config, paths):
     corpus_change = config['profile'] == 'github-backlog-v1' and any(
         p == folder or p.startswith(folder + '/') or folder.startswith(p + '/')
         for p in paths for folder in config['work']['directories'])
-    return corpus_change or any(p.startswith(('.github/', '.harness/')) or p == 'AGENTS.md'
-               or (own_tool and (p.startswith(('openharness/', 'tests/', 'docs/contracts/')) or p == 'pyproject.toml')) for p in paths)
+    roots = ['.github', '.harness'] + (['openharness', 'tests', 'docs/contracts'] if own_tool else [])
+    return corpus_change or any(p == 'AGENTS.md' or (own_tool and p == 'pyproject.toml')
+               or any(p == root or p.startswith(root + '/') for root in roots) for p in paths)
 
 
 def check_candidate(config, baseline, root, event, api=gh_api):
@@ -230,7 +233,7 @@ def check_candidate(config, baseline, root, event, api=gh_api):
     merged = repo.git('merge-tree', '--write-tree', context['base'], context['head']).splitlines()[0]
     if tree != merged:
         raise ValueError('Strict candidate head must equal intended integration result tree')
-    changed = repo.git('diff', '--name-only', '--no-renames', context['base'], context['head']).splitlines()
+    changed = repo.git_paths('diff', '--name-only', '--no-renames', '-z', context['base'], context['head'])
     protected = control_change(config, changed)
     authorized = control_authorized(config, context, api) if protected else False
     if protected and not authorized:
@@ -276,20 +279,36 @@ def check_candidate(config, baseline, root, event, api=gh_api):
 
 def publish(config, event, result, head, base, tree, identity, api=gh_api, write=gh_write):
     prefix = f'repos/{config["repository"]}'
-    pull = api(f'{prefix}/pulls/{int(event["pull_request"]["number"])}')
     state = 'failure'
     if result == 'success':
         context = current_context(config, event, api)
-        actual_tree = api(f'{prefix}/git/commits/{context["head"]}')['tree']['sha']
+        commit = api(f'{prefix}/git/commits/{context["head"]}')
+        actual_tree = commit['tree']['sha']
         expected_identity = digest({'context': context, 'tree': actual_tree, 'verification': config['verification']})
-        if head == context['head'] and base == context['base'] and tree == actual_tree and identity == expected_identity:
+        matches = (commit.get('sha') == context['head'] and head == context['head']
+                   and base == context['base'] and tree == actual_tree and identity == expected_identity)
+        if matches and context.get('merge'):
+            merge = api(f'{prefix}/git/commits/{context["merge"]}')
+            matches = (merge.get('sha') == context['merge'] and merge.get('tree', {}).get('sha') == actual_tree
+                       and [p.get('sha') for p in merge.get('parents', [])] == [context['base'], context['head']])
+        if matches and current_context(config, event, api) == context:
             state = 'success'
+    else:
+        # Failed verification may have no outputs or legal work context. It can
+        # publish a rejection, never success, to one observed PR snapshot.
+        pull = api(f'{prefix}/pulls/{int(event["pull_request"]["number"])}')
+        context = {'head': pull['head']['sha'], 'merge': pull.get('merge_commit_sha')}
+    subjects = {context['head']}
+    if context.get('merge'):
+        subjects.add(context['merge'])
+    if not all(isinstance(sha, str) and re.fullmatch(r'[0-9a-f]{40}', sha) for sha in subjects):
+        raise ValueError('Publication requires exact immutable subject revisions')
+    # No provider transaction spans observation and status writes. Keep the
+    # immutable verified subjects even if a ref moves; native strict gates fence
+    # stale base/head integration. Never retarget success to a newer snapshot.
     url = f'https://github.com/{config["repository"]}/actions/runs/{os.environ["GITHUB_RUN_ID"]}'
     payload = {'state': state, 'context': config['verification']['required_check'], 'description': f'candidate {identity[:32] if identity else "rejected"}', 'target_url': url}
-    subjects = {pull['head']['sha']}
-    if pull.get('merge_commit_sha'):
-        subjects.add(pull['merge_commit_sha'])
-    for sha in subjects:
+    for sha in sorted(subjects):
         write(f'{prefix}/statuses/{sha}', 'POST', payload)
     return {'state': state, 'subjects': sorted(subjects), 'target_url': url}
 
