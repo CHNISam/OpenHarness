@@ -42,15 +42,22 @@ def default_config(repository, target):
 
 def validate_config(config):
     expected = {'schema', 'profile', 'repository', 'target', 'authorities', 'envelope', 'verification'}
+    if isinstance(config, dict) and config.get('profile') == 'github-backlog-v1':
+        expected.add('work')
     if not isinstance(config, dict) or set(config) != expected:
         raise ValueError('Configuration must contain the exact supported fields; guarantee omission/overrides are forbidden')
-    if config['schema'] != 1 or config['profile'] != 'github-pr-v1':
+    if config['schema'] != 1 or config['profile'] not in ('github-pr-v1', 'github-backlog-v1'):
         raise ValueError('Unsupported schema or profile')
     if not isinstance(config['repository'], str) or not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', config['repository']):
         raise ValueError('Expected GitHub owner/repository')
     if not isinstance(config['target'], str) or not re.fullmatch(r'[A-Za-z0-9_./-]+', config['target']) or config['target'].startswith('-') or '..' in config['target']:
         raise ValueError('Invalid target branch')
-    if config['authorities'] != AUTHORITIES:
+    authorities = dict(AUTHORITIES)
+    if config['profile'] == 'github-backlog-v1':
+        from .backlog import validate_work
+        validate_work(config['work'])
+        authorities['work'] = 'repository-backlog'
+    if config['authorities'] != authorities:
         raise ValueError('Each semantic state must have exactly the supported effective authority')
     envelope = config['envelope']
     if not isinstance(envelope, dict) or set(envelope) != {'workspace_writers', 'trusted_actors', 'excluded_transitions'}:
@@ -111,7 +118,8 @@ def evaluate(config, local, provider):
     observed = not provider.get('errors') and bool(provider.get('fingerprint'))
     gate = observed and provider.get('gate', False)
     resolve('applicability', True, 'Fixed profile evaluates all 16 candidates; unknown applicability blocks closure', 'catalogue completeness', ['profile', 'envelope'])
-    resolve('authority', installed and observed and local.get('authority_matches_origin', False), 'Exact semantic authority map plus live repository and origin identity required', 'declared semantic mapping; privileged policy operators trusted', ['authorities', 'provider_identity', 'origin'])
+    work_observed = config['profile'] != 'github-backlog-v1' or provider.get('work_authority', {}).get('valid') is True
+    resolve('authority', installed and observed and work_observed and local.get('authority_matches_origin', False), 'Exact semantic authority map plus live repository, origin and configured work corpus required', 'declared semantic mapping; privileged policy operators trusted', ['authorities', 'provider_identity', 'origin', 'work'])
     topology = config['envelope']['workspace_writers']
     single = topology == 'single' and 'local-executor' in config['envelope']['trusted_actors']
     for name in ('concurrency', 'fencing'):

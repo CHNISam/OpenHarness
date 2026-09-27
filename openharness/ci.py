@@ -101,7 +101,33 @@ jobs:
 '''
 
 
+def work_reference(config, pull):
+    lines = [line.rstrip() for line in (pull.get('body') or '').splitlines() if line.startswith('Work-Item:')]
+    if len(lines) != 1 or not lines[0].startswith('Work-Item: '):
+        raise ValueError('Exactly one work authority required')
+    value = lines[0][len('Work-Item: '):]
+    if config['profile'] == 'github-backlog-v1':
+        from .backlog import task_id
+        return task_id(value)
+    if not re.fullmatch(r'#[1-9][0-9]*', value):
+        raise ValueError('PR must bind exactly one canonical Work-Item: #N')
+    return int(value[1:])
+
+
 def candidate_context(config, pull, issue):
+    reference = work_reference(config, pull)
+    if config['profile'] == 'github-backlog-v1':
+        if pull.get('state') != 'open' or pull.get('draft') or pull.get('base', {}).get('ref') != config['target']:
+            raise ValueError('Only open ready PRs targeting the configured authority are legal')
+        if issue['id'] != reference or issue['actor'] != pull.get('user', {}).get('login', '').lower():
+            raise ValueError('Canonical Backlog work/executor differs from the PR')
+        if not re.fullmatch(rf'codex/backlog-{re.escape(reference)}-[a-z][a-z0-9-]{{0,47}}', pull.get('head', {}).get('ref', '')):
+            raise ValueError('Change branch must bind the canonical Backlog task')
+        head, base = pull['head']['sha'], pull['base']['sha']
+        if not all(re.fullmatch(r'[0-9a-f]{40}', sha) for sha in (head, base)) or issue['revision'] != base:
+            raise ValueError('Candidate must bind exact canonical work/head/base revisions')
+        return {'head': head, 'base': base, 'task': reference, 'actor': issue['actor'], 'pr': pull['number'],
+                'merge': pull.get('merge_commit_sha'), 'work_revision': issue['revision'], 'work_identity': issue['identity']}
     refs = re.findall(r'^Work-Item: #(\d+)\s*$', pull.get('body') or '', flags=re.MULTILINE)
     if len(refs) != 1:
         raise ValueError('PR must bind exactly one canonical Work-Item: #N')
@@ -157,12 +183,15 @@ def baseline_config(path):
 def current_context(config, event, api=gh_api):
     prefix = f'repos/{config["repository"]}'
     pull = api(f'{prefix}/pulls/{int(event["pull_request"]["number"])}')
-    refs = re.findall(r'^Work-Item: #(\d+)\s*$', pull.get('body') or '', flags=re.MULTILINE)
-    if len(refs) != 1:
-        raise ValueError('Exactly one work authority required')
-    issue = api(f'{prefix}/issues/{int(refs[0])}')
-    context = candidate_context(config, pull, issue)
     live = api(f'{prefix}/branches/{config["target"]}')['commit']['sha']
+    reference = work_reference(config, pull)
+    if config['profile'] == 'github-backlog-v1':
+        from .backlog import authorize, read_corpus
+        observation = read_corpus(config, live, api)
+        work = {**authorize(observation, config['work'], reference, pull.get('user', {}).get('login')), 'revision': live}
+    else:
+        work = api(f'{prefix}/issues/{reference}')
+    context = candidate_context(config, pull, work)
     if context['base'] != live:
         raise ValueError('PR base has not converged to current authoritative target')
     return context
@@ -170,7 +199,8 @@ def current_context(config, event, api=gh_api):
 
 def control_authorized(config, context, api=gh_api):
     prefix = f'repos/{config["repository"]}'
-    comments = api(f'{prefix}/issues/{context["issue"]}/comments?per_page=100')
+    surface = context['pr'] if config['profile'] == 'github-backlog-v1' else context['issue']
+    comments = api(f'{prefix}/issues/{surface}/comments?per_page=100')
     if len(comments) >= 100:
         raise ValueError('Approval observation incomplete')
     expected = f'OpenHarness-Control-Approval: {context["head"]} {context["base"]}'
@@ -181,7 +211,10 @@ def control_authorized(config, context, api=gh_api):
 
 def control_change(config, paths):
     own_tool = (config['verification'].get('controller') or {}).get('repository', '').lower() == config['repository'].lower()
-    return any(p.startswith(('.github/', '.harness/')) or p == 'AGENTS.md'
+    corpus_change = config['profile'] == 'github-backlog-v1' and any(
+        p == folder or p.startswith(folder + '/') or folder.startswith(p + '/')
+        for p in paths for folder in config['work']['directories'])
+    return corpus_change or any(p.startswith(('.github/', '.harness/')) or p == 'AGENTS.md'
                or (own_tool and (p.startswith(('openharness/', 'tests/', 'docs/contracts/')) or p == 'pyproject.toml')) for p in paths)
 
 
@@ -202,6 +235,15 @@ def check_candidate(config, baseline, root, event, api=gh_api):
     authorized = control_authorized(config, context, api) if protected else False
     if protected and not authorized:
         raise ValueError('Protected control change requires native owner approval bound to head and base')
+    if config['profile'] == 'github-backlog-v1':
+        from .backlog import local_corpus
+        resulting_work = local_corpus(repo, context['head'], config['work'])
+        if context['task'] not in resulting_work['tasks']:
+            raise ValueError('Candidate cannot remove its canonical work item')
+        for row in resulting_work['tasks'].values():
+            if row['status'] == config['work']['done_status'] and any(
+                    resulting_work['tasks'][dependency]['status'] != config['work']['done_status'] for dependency in row['dependencies']):
+                raise ValueError('Candidate completion requires completed prerequisites')
     # If controls change, both old and proposed acceptance configurations are tested.
     configurations = [config]
     if '.harness/config.json' in changed:

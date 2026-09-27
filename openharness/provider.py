@@ -120,12 +120,29 @@ class GitHub:
             errors.append(f'canonical workflow tree: {exc}')
         from .native import observe_controller, observe_proof
         observe_controller(config, raw, self.api, errors)
+        work_authority = None
+        if config['profile'] == 'github-backlog-v1':
+            from .backlog import read_corpus
+            try:
+                work = read_corpus(config, raw.get('branch', {}).get('commit', {}).get('sha'), self.api)
+                work_authority = {'valid': True, 'revision': work['revision'], 'identity': work['identity']}
+            except (ValueError, TypeError, KeyError) as exc:
+                errors.append(f'backlog work authority: {exc}')
+                work_authority = {'valid': False, 'reason': str(exc)}
         observation = summarize(config, raw, errors)
+        if work_authority is not None:
+            observation['work_authority'] = work_authority
         observation['deployment_proof'] = observe_proof(config, observation, self.api)
         observation['deployment_proven'] = observation['deployment_proof']['valid']
         return observation
 
     def work(self, config, issue):
+        if config['profile'] == 'github-backlog-v1':
+            from .backlog import authorize, read_corpus
+            revision = self.api(f'repos/{config["repository"]}/branches/{quote(config["target"], safe="")}')['commit']['sha']
+            observation = read_corpus(config, revision, self.api)
+            actor = self.api('user').get('login')
+            return {**authorize(observation, config['work'], issue, actor), 'revision': revision}
         if type(issue) is not int or issue <= 0:
             raise ValueError('Work item must be a positive GitHub Issue number')
         item = self.api(f'repos/{config["repository"]}/issues/{issue}')
@@ -134,6 +151,20 @@ class GitHub:
         return {'number': issue, 'title': item.get('title'), 'url': item.get('html_url'), 'state': item['state']}
 
     def list_work(self, config):
+        if config['profile'] == 'github-backlog-v1':
+            from .backlog import authorize, read_corpus
+            revision = self.api(f'repos/{config["repository"]}/branches/{quote(config["target"], safe="")}')['commit']['sha']
+            observation = read_corpus(config, revision, self.api)
+            actor = self.api('user').get('login')
+            if not isinstance(actor, str) or not actor:
+                raise ProviderError('Native executor identity unavailable')
+            result = []
+            for identifier in sorted(observation['tasks']):
+                try:
+                    result.append({**authorize(observation, config['work'], identifier, actor), 'revision': revision})
+                except ValueError:
+                    continue
+            return result
         items = self.api(f'repos/{config["repository"]}/issues?state=open&per_page=100')
         if not isinstance(items, list):
             raise ProviderError('Expected Issue list')

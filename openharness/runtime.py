@@ -155,7 +155,12 @@ class Runtime:
         binding = state.get('workspaces', {}).get(str(self.repo.root))
         if not binding or binding['branch'] != branch or branch == config['target']:
             raise ValueError('Protected transition requires a bound isolated Change workspace')
-        self.provider.work(config, binding['work_item'])
+        if binding.get('invalidated'):
+            raise ValueError('Workspace work authority was invalidated; create a fresh legal Change binding')
+        work = self.provider.work(config, binding['work_item'])
+        if config['profile'] == 'github-backlog-v1' and (
+                binding.get('work_identity') != work['identity'] or binding.get('actor') != work['actor']):
+            raise ValueError('Backlog workspace authority invalidated by canonical work/assignment drift')
         if binding.get('config') != digest(config):
             raise ValueError('Workspace authority binding invalidated by configuration change')
         return {'allowed': True, 'workspace': binding, 'substrate': report['substrate']}
@@ -171,11 +176,13 @@ class Runtime:
                 report = self.doctor()
                 if state['lifecycle'] != 'MANAGED' or not report['closure'] or state.get('substrate') != report['substrate']:
                     raise ClosureError('Workspace creation requires current managed closure; use explicit --genesis only during bootstrap', report, state)
-            self.provider.work(config, issue)
+            work = self.provider.work(config, issue)
             observation = self.provider.observe(config)
             if observation.get('errors') or not observation.get('target_sha'):
                 raise ValueError('Cannot bind workspace without observable live target revision')
             sha = observation['target_sha']
+            if config['profile'] == 'github-backlog-v1' and work['revision'] != sha:
+                raise ValueError('Canonical work revision changed during workspace authorization')
             # Fetch only the configured authority, without silently moving project refs.
             try:
                 self.repo.revision(sha)
@@ -184,6 +191,8 @@ class Runtime:
                 self.repo.revision(sha)
             binding = self.repo.workspace(issue, change, sha)
             binding.update(authority=state['lifecycle'], config=digest(config), created_at=now())
+            if config['profile'] == 'github-backlog-v1':
+                binding.update(work_identity=work['identity'], work_revision=work['revision'], actor=work['actor'])
             state.setdefault('workspaces', {})[binding['path']] = binding
             self.save_state(state)
             return binding
@@ -200,9 +209,20 @@ class Runtime:
             orphaned = [p for p in state.get('workspaces', {}) if p not in existing]
             for path in orphaned:
                 del state['workspaces'][path]
+            invalid_work = []
+            config = self.repo.config()
+            if config['profile'] == 'github-backlog-v1':
+                for path, binding in state.get('workspaces', {}).items():
+                    try:
+                        work = self.provider.work(config, binding['work_item'])
+                        if binding.get('work_identity') != work['identity'] or binding.get('actor') != work['actor']:
+                            raise ValueError('Canonical Backlog work/assignment drift')
+                    except (ValueError, KeyError, TypeError) as exc:
+                        binding['invalidated'] = {'time': now(), 'reason': str(exc)}
+                        invalid_work.append(path)
             state.setdefault('events', []).append({'time': now(), 'transition': 'RECONCILE', 'orphaned_bindings': orphaned})
             self.save_state(state)
-            return {**state, 'doctor': report, 'orphaned_bindings': orphaned, 'recovery': 'No automatic reactivation or acquisition of stale authority'}
+            return {**state, 'doctor': report, 'orphaned_bindings': orphaned, 'invalid_work_bindings': invalid_work, 'recovery': 'No automatic reactivation or acquisition of stale authority'}
 
     def _worktrees(self):
         records = []
@@ -241,7 +261,8 @@ class Runtime:
             work, work_error = [], str(exc)
         return {
             'config': str(self.repo.root / '.harness/config.json'), 'authorities': config['authorities'],
-            'work_url': f'https://github.com/{config["repository"]}/issues', 'legal_work': work,
+            'work_url': (f'https://github.com/{config["repository"]}/tree/{config["target"]}/' + config['work']['directories'][0]
+                         if config['profile'] == 'github-backlog-v1' else f'https://github.com/{config["repository"]}/issues'), 'legal_work': work,
             'work_discovery_error': work_error, 'lifecycle': state['lifecycle'],
             'workspace': state.get('workspaces', {}).get(str(self.repo.root)),
             'doctor': self.doctor(), 'next': 'Resolve OPEN GAPs before activation; Genesis supports explicit installer workspaces and local candidate diagnostics',
@@ -384,15 +405,20 @@ class Runtime:
             return {'applied': applied, 'activated': False, 'next': 'Observe live enforcement and complete deployment proof before activation'}
 
     def integrate(self, pr):
-        from .ci import candidate_context
+        from .ci import candidate_context, current_context
         from .provider import gh_write
         with self.locked():
             preflight = self.preflight()
             config = self.repo.config()
             prefix = f'repos/{config["repository"]}'
             pull = self.provider.api(f'{prefix}/pulls/{int(pr)}')
-            issue = self.provider.api(f'{prefix}/issues/{preflight["workspace"]["work_item"]}')
-            context = candidate_context(config, pull, issue)
+            if config['profile'] == 'github-backlog-v1':
+                context = current_context(config, {'pull_request': {'number': int(pr)}}, self.provider.api)
+                if context['task'] != preflight['workspace']['work_item'] or context['actor'] != preflight['workspace']['actor']:
+                    raise ValueError('Native PR work/executor differs from the bound workspace')
+            else:
+                issue = self.provider.api(f'{prefix}/issues/{preflight["workspace"]["work_item"]}')
+                context = candidate_context(config, pull, issue)
             if pull['head']['ref'] != preflight['workspace']['branch'] or context['head'] != self.repo.revision('HEAD') or self.repo.git('status', '--porcelain'):
                 raise ValueError('Integration requires the exact clean bound local PR candidate')
             base = self.provider.api(f'{prefix}/branches/{config["target"]}')['commit']['sha']

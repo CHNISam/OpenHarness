@@ -23,6 +23,14 @@ Build the actual delta and run project checks. For a clean candidate, fetch the 
 
 For other profiles or changed CLI behavior, follow the installed `.harness/AGENT.md` and current OpenHarness documentation rather than these example commands.
 
+For `github-backlog-v1`, canonical target-ref task files are the sole work authority.
+Use `workspace --task TASK_ID --change NAME` and exactly one `Work-Item: TASK_ID`
+PR line. Read the explicit configured native executor mapping and supported task
+subset. Candidate task edits cannot grant baseline authority; corpus/control edits
+require exact owner approval on the PR. Stale corpus/assignment bindings reject and
+reconciliation records invalidation without acquiring authority. This profile needs
+its own producer and task-specific native proof; Issue-only proof cannot activate it.
+
 ## Recover without bypassing authority
 
 Inspect the failed command, `entry`, and `doctor` for the exact gap. A temporary provider observation failure can make a fresh Doctor differ from an earlier one; re-observe before changing lifecycle state. A source checkout behind the target may carry older control files than a new worktree; compare them and legally update a clean source checkout before reactivation. If reconciliation is needed, use `reconcile` and preserve the worktree. It can invalidate activation and does not reactivate automatically. Return to managed operation only through a complete live readiness assessment and `activate`; resolve remaining gaps first.

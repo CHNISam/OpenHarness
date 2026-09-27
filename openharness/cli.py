@@ -6,7 +6,7 @@ import subprocess
 import sys
 
 from . import __version__
-from .repository import Repository, bootstrap, json_text
+from .repository import Repository, bootstrap, json_text, safe_path
 from .runtime import Runtime
 
 
@@ -18,6 +18,8 @@ def parser():
     install = commands.add_parser('bootstrap', help='Stage missing project-local mechanisms without activation')
     install.add_argument('--repository', help='owner/repository; defaults to origin')
     install.add_argument('--target', default='main')
+    install.add_argument('--profile', choices=['github-pr-v1', 'github-backlog-v1'])
+    install.add_argument('--work-config', help='Repository-relative JSON Backlog adapter configuration for Genesis')
     for name, help_text in (
         ('doctor', 'Observe live GitHub substrate and evaluate every candidate guarantee'),
         ('entry', 'Discover instructions, authority, work and current closure'),
@@ -39,7 +41,9 @@ def parser():
     exceptional = commands.add_parser('break-glass', help='Record local exceptional recovery; grants no remote bypass')
     exceptional.add_argument('--reason', required=True)
     workspace = commands.add_parser('workspace', help='Bind an open Issue/Change to a native isolated worktree')
-    workspace.add_argument('--issue', type=int, required=True)
+    work_item = workspace.add_mutually_exclusive_group(required=True)
+    work_item.add_argument('--issue', type=int)
+    work_item.add_argument('--task', help='Exact canonical Backlog task ID')
     workspace.add_argument('--change', required=True)
     workspace.add_argument('--genesis', action='store_true', help='Explicit bootstrap installer authority, only before activation')
     for name in ('candidate', 'verify', 'evidence'):
@@ -58,7 +62,8 @@ def main(argv=None):
         runtime = Runtime(repo)
         exit_code = 0
         if args.command == 'bootstrap':
-            result = bootstrap(repo, args.repository, args.target)
+            work = json.loads(safe_path(repo.root, args.work_config).read_text(encoding='utf-8')) if args.work_config else None
+            result = bootstrap(repo, args.repository, args.target, profile=args.profile, work=work)
         elif args.command == 'break-glass':
             result = runtime.break_glass(args.reason)
         elif args.command == 'upgrade':
@@ -70,7 +75,7 @@ def main(argv=None):
         elif args.command == 'handoff':
             result = runtime.handoff(args.reason)
         elif args.command == 'workspace':
-            result = runtime.workspace(args.issue, args.change, args.genesis)
+            result = runtime.workspace(args.task if args.task is not None else args.issue, args.change, args.genesis)
         elif args.command == 'candidate':
             from .model import candidate_id
             candidate = runtime._verification_candidate(args.head, args.base)
