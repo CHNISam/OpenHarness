@@ -27,6 +27,27 @@ def execution_identity():
     return {'tool': __version__, 'code': digest(code), 'python': sys.version, 'platform': platform.platform()}
 
 
+class ClosureError(ValueError):
+    """A rejection with diagnostics from the exact blocking observation."""
+
+    def __init__(self, message, report, state):
+        super().__init__(message)
+        provider = report['provider']
+        self.diagnostics = {
+            'observed_at': report.get('observed_at'),
+            'lifecycle': state['lifecycle'],
+            'activation_substrate': state.get('substrate'),
+            'observed_substrate': report['substrate'],
+            'activation_matches': state.get('substrate') == report['substrate'],
+            'readiness': report['readiness']['closure'],
+            'gaps': [{'id': row['id'], 'reason': row['reason']}
+                     for row in report['guarantees'] if row['status'] == 'OPEN GAP'],
+            'provider': {key: provider.get(key) for key in
+                         ('errors', 'fingerprint', 'target_sha', 'gate',
+                          'trusted_controller', 'provenance', 'deployment_proof')},
+        }
+
+
 class Runtime:
     def __init__(self, repo, provider=None):
         self.repo = repo
@@ -126,7 +147,7 @@ class Runtime:
         report = self.doctor()
         state = self.state()
         if state['lifecycle'] != 'MANAGED' or not report['closure'] or state.get('substrate') != report['substrate']:
-            raise ValueError('Protected transition rejected: no current managed closure; run doctor/reconcile')
+            raise ClosureError('Protected transition rejected: no current managed closure; run doctor/reconcile', report, state)
         config = self.repo.config()
         if self.repo.identity().lower() != config['repository'].lower():
             raise ValueError('Origin authority does not match installed configuration')
@@ -149,7 +170,7 @@ class Runtime:
             else:
                 report = self.doctor()
                 if state['lifecycle'] != 'MANAGED' or not report['closure'] or state.get('substrate') != report['substrate']:
-                    raise ValueError('Workspace creation requires current managed closure; use explicit --genesis only during bootstrap')
+                    raise ClosureError('Workspace creation requires current managed closure; use explicit --genesis only during bootstrap', report, state)
             self.provider.work(config, issue)
             observation = self.provider.observe(config)
             if observation.get('errors') or not observation.get('target_sha'):
