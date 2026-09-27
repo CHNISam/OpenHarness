@@ -62,6 +62,11 @@ def parser():
 
 
 def main(argv=None):
+    # JSON diagnostics must survive legacy Windows console encodings and pipes.
+    # In-process callers may provide StringIO streams without reconfigure.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', errors='backslashreplace')
     args = parser().parse_args(argv)
     try:
         repo = Repository(args.repo)

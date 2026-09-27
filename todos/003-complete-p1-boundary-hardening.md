@@ -49,4 +49,9 @@ installed v0.3.0 explicitly activated; live post-activation Doctor established
 14 guarantees, 2 not applicable and zero open gaps. No dependency/service added,
 no native enforcement weakened; probe PRs #40/#41 closed without integration.
 
+2026-09-27: Final neutral-directory usage found a Windows charmap output failure.
+Reopened Issue #36 and added a failing fresh-process regression before a five-line
+UTF-8 CLI repair. The immutable CI producer remains unchanged. Independent observer
+installation and explicit activation must follow the protected follow-up PR.
+
 https://github.com/CHNISam/OpenHarness/issues/36
