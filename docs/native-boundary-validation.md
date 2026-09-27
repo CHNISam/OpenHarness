@@ -55,5 +55,31 @@ The proof references immutable heads, native rule suites and trusted publisher
 logs. It is scoped to this deployment and remains subject to live re-observation.
 Log expiry requires proof renewal; it is not hidden by a local receipt. Competing
 writers and arbitrary existing workflows are not established by these cases.
-After this manifest is integrated, an independently installed tool must re-audit
-and explicitly activate before managed closure is claimed.
+## Independent activation and closure
+
+Proof PR #42 passed trusted run `36312133515` and integrated as
+`b58b676563f170b85286e7f1acd2e54493d083d6`, with the exact approved candidate tree
+`edb356dbe9eb4c08bc51ab394dc85805859b0f42`. The declared operator recovery used
+normal native protected merging, without bypass. Managed closure was not claimed
+during exceptional staging.
+
+The independently installed Python 3.13 tool was built from reviewed producer
+`1cf6ad4662f1df171989ad9fa022f832628b8c7f` using `--no-deps --no-index`;
+version 0.3.0, wheel SHA-256
+`df478f44151e047e918eb572e1fba1340fafcf49799ec12043831ca0a0c31134`.
+This is a reviewed source deployment, not a newly published release. From a
+neutral directory, live Doctor established readiness before explicit activation.
+Activation entered MANAGED with substrate
+`4894e96eb9a24c603fda29bfc3a921686439fb47c69567117055eed01bc32527`.
+
+Post-activation live Doctor at `2026-09-27T10:22:39Z` returned `closure: true`,
+14 ESTABLISHED, 2 NOT APPLICABLE, zero OPEN GAP and no provider errors.
+The completed negative PRs were closed without merging; their branches and native
+evidence remain available. This audit made 38 API requests and 3 log requests,
+reused 3 immutable-object responses and took 31.750 seconds. The preceding readiness
+audit took 35.551 seconds with the same counts. These are observations, not latency
+or availability promises; fresh mutable reads and final target re-observation remain.
+
+Current readiness/activation comes only from live `entry`/`doctor`, never this saved
+record. Existing multi-workflow, competing-writer and log-retention limits remain;
+one successful deployment does not establish broad or long-term production maturity.

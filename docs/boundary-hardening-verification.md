@@ -55,7 +55,10 @@ the old producer `d85c0df`, not deployment of these fixes.
 The repaired producer requires an exact reviewed source pin and fresh native
 valid/invalid/source-spoof/direct-update references for that substrate. Native PR
 acceptance under the old producer proves candidate tests, not execution of the new
-publisher. Record the new pin, native runs and fresh Doctor separately when deployed.
+publisher. The [separate repaired deployment record](native-boundary-validation.md)
+now records the immutable new pin, actual new producer runs, native legal/denial
+cases, independently installed tool and explicit activation. Post-activation live
+Doctor returned closure=true, 14 established and 2 not applicable with zero open gaps.
 
 ## Explicit limits
 
