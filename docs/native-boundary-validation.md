@@ -22,3 +22,10 @@ source execution, direct canonical update denial, and a new complete live Doctor
 The canonical proof file and current Doctor remain authority; this saved record is
 historical evidence. Selected-actions and arbitrary consumer production deployments
 are not claimed by this repository's `allowed_actions: all` proof.
+
+## Legal native acceptance probe
+
+This documentation-only candidate exercises the complete acceptance suite and
+independent publisher under the repaired canonical pin. It changes no acceptance,
+work authority, workflow or policy. Native success, protected merge and an equal
+integrated tree are required before its references can become a valid proof case.
