@@ -31,7 +31,8 @@ class BacklogControllerTests(unittest.TestCase):
         if '/git/blobs/' in path:
             return {'sha': sha, 'encoding': 'base64', 'content': base64.b64encode(self.data).decode()}
         if '/git/commits/' in path:
-            return {'tree': {'sha': 'd' * 40}}
+            return {'sha': path.rsplit('/', 1)[1], 'tree': {'sha': 'd' * 40},
+                    'parents': [{'sha': 'b' * 40}, {'sha': 'a' * 40}]}
         raise AssertionError(path)
 
     def test_context_uses_canonical_task_not_issue_or_candidate_task(self):

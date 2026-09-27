@@ -1,7 +1,7 @@
 import copy
 import unittest
 
-from openharness.ci import WORKFLOW_PATH, controller_blobs, event_policy, workflow_text
+from openharness.ci import WORKFLOW_PATH, CHECKOUT, PYTHON, controller_blobs, event_policy, workflow_text
 from openharness.model import default_config
 from openharness.native import trusted, producer_blobs
 from openharness.provider import summarize
@@ -35,6 +35,21 @@ class NativeTests(unittest.TestCase):
         self.raw['workflows']['permissions']['enabled'] = False
         self.assertFalse(trusted(self.config, self.raw))
         self.raw['workflows']['permissions'].update(enabled=True, allowed_actions='selected')
+        self.assertFalse(trusted(self.config, self.raw))
+
+    def test_selected_actions_supports_explicit_native_permission(self):
+        permissions = self.raw['workflows']['permissions']
+        permissions.update(allowed_actions='selected', selected_actions={
+            'github_owned_allowed': True, 'verified_allowed': False, 'patterns_allowed': []})
+        self.assertTrue(trusted(self.config, self.raw))
+        permissions['selected_actions'].update(github_owned_allowed=False, patterns_allowed=[
+            f'actions/checkout@{CHECKOUT}', f'actions/setup-python@{PYTHON}'])
+        self.assertTrue(trusted(self.config, self.raw))
+        permissions['selected_actions']['patterns_allowed'].pop()
+        self.assertFalse(trusted(self.config, self.raw))
+        permissions['selected_actions'].update(verified_allowed=True, patterns_allowed=['actions/*'])
+        self.assertFalse(trusted(self.config, self.raw))
+        permissions['selected_actions']['github_owned_allowed'] = 'true'
         self.assertFalse(trusted(self.config, self.raw))
 
     def test_native_all_workflows_normalization_is_equivalent(self):

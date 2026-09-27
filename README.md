@@ -292,11 +292,15 @@ See [live deployment record](docs/native-deployment-validation.md) and the canon
 this repository's configured profile; `entry`/`doctor` must still revalidate its current
 state. There are no remaining bootstrap implementation todos for that profile.
 
-The conservative adapter requires repository Actions enabled with `allowed_actions:
-all`, one canonical trusted workflow and the native all-workflow event policy. Selected
-allowlists and competing/unknown workspace writers remain explicit unsupported scope
-until applicable adapters exist. Native publisher logs are part of proof: expiration
-or unavailability invalidates closure and requires fresh deployment proof.
+The conservative adapter requires repository Actions enabled, one canonical trusted
+workflow and the native all-workflow event policy. It supports `allowed_actions: all`
+or fully observed `selected` settings allowing GitHub-owned Actions or both exact
+compiler Action SHA entries. Other allowlist interpretations and competing/unknown
+workspace writers remain explicit unsupported scope. Native publisher logs are part
+of proof: expiration or unavailability invalidates closure and requires fresh proof.
+The [proof recovery guide](docs/proof-recovery.md) explains failure phases, observation
+costs, renewal and strict/cooperative compatibility. Immutable objects are reused only
+within one live audit; mutable authority and final target freshness are re-observed.
 
 Harness self-upgrades also protect tool code, acceptance tests and frozen contracts
 when this repository hosts its producer. These changes retain exact owner authority

@@ -135,6 +135,20 @@ class Repository:
             raise ValueError(f'Git {args[0]} failed: {result.stderr.strip() or result.stdout.strip()}')
         return result.stdout.strip()
 
+    def git_paths(self, *args):
+        """Read machine path records without quoting, stripping or newline conversion."""
+        if '-z' not in args:
+            raise ValueError('Machine path reads require NUL-delimited Git output')
+        result = subprocess.run(['git', '-C', str(self.root), *args], capture_output=True, timeout=60)
+        if result.returncode:
+            raise ValueError('Git path read failed: ' + result.stderr.decode('utf-8', 'replace').strip())
+        if not result.stdout:
+            return []
+        records = result.stdout.split(b'\0')
+        if records[-1] != b'' or any(not record for record in records[:-1]):
+            raise ValueError('Malformed NUL-delimited Git path output')
+        return [record.decode('utf-8', 'surrogateescape') for record in records[:-1]]
+
     def config(self):
         path = safe_path(self.root, '.harness/config.json')
         if not path.is_file():

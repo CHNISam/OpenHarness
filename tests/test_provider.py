@@ -1,7 +1,7 @@
 import unittest
 
 from openharness.model import default_config
-from openharness.provider import GitHub, summarize
+from openharness.provider import GitHub, ProviderError, summarize, observation_reader
 
 
 def protected_rules():
@@ -32,6 +32,67 @@ class ProviderTests(unittest.TestCase):
         self.assertTrue(summarize(self.config, raw, [])['gate'])
         raw['rulesets'][0]['bypass_actors'] = [{'actor_id': 5, 'bypass_mode': 'always'}]
         self.assertFalse(summarize(self.config, raw, [])['gate'])
+
+    def test_observation_reuses_only_immutable_successful_reads(self):
+        paths = []
+        def api(path):
+            paths.append(path)
+            return {'value': len(paths)}
+        read, cost = observation_reader(api)
+        immutable = 'repos/owner/repo/contents/config.json?ref=' + 'a' * 40
+        first = read(immutable)
+        first['value'] = 'mutated by caller'
+        self.assertEqual({'value': 1}, read(immutable))
+        for path in ('repos/owner/repo/branches/main', 'repos/owner/repo/pulls/7',
+                     'repos/owner/repo/contents/config.json?ref=main',
+                     'repos/owner/repo/commits/' + 'a' * 40 + '/statuses',
+                     'repos/owner/repo/git/commits/' + 'b' * 40 + '?unexpected=1'):
+            self.assertNotEqual(read(path), read(path))
+        self.assertEqual(11, cost['requests'])
+        self.assertEqual(1, cost['reused'])
+        fresh, _ = observation_reader(api)
+        self.assertNotEqual({'value': 1}, fresh(immutable))
+
+    def test_failed_immutable_observations_are_not_cached(self):
+        calls = []
+        def api(path):
+            calls.append(path)
+            if len(calls) == 1:
+                raise ProviderError('temporarily unavailable')
+            return {'tree': []}
+        read, cost = observation_reader(api)
+        path = 'repos/owner/repo/git/trees/' + 'a' * 40 + '?recursive=1'
+        with self.assertRaises(ProviderError):
+            read(path)
+        self.assertEqual({'tree': []}, read(path))
+        self.assertEqual(2, cost['requests'])
+        self.assertEqual(0, cost['reused'])
+
+    def test_target_drift_during_audit_is_an_open_gap(self):
+        reads = 0
+        def api(path):
+            nonlocal reads
+            if '/branches/' in path and '/rules/' not in path:
+                reads += 1
+                return {'commit': {'sha': ('a' if reads == 1 else 'b') * 40}}
+            if '/rules/branches/' in path:
+                return protected_rules()
+            if '/rulesets?' in path:
+                return [{'id': 7}]
+            if path.endswith('/rulesets/7'):
+                return substrate()['rulesets'][0]
+            if path.endswith('/protection'):
+                return None
+            if '/actions/workflows?' in path:
+                return {'total_count': 0, 'workflows': []}
+            if '/git/trees/' in path:
+                return {'tree': [], 'truncated': False}
+            return substrate()['repository']
+        report = GitHub(api).observe(self.config)
+        self.assertFalse(report['gate'])
+        self.assertFalse(report['deployment_proven'])
+        self.assertTrue(any('target changed during observation' in error for error in report['errors']))
+        self.assertGreater(report['observation_cost']['requests'], 0)
 
     def test_unbound_check_source_is_not_sufficient(self):
         raw = substrate()

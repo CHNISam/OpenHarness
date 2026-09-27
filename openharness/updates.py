@@ -345,7 +345,7 @@ def prepare(repo, api=gh_api):
     The old pinned executable must be supplied by the self-hosted runner operator.
     """
     from .model import validate_config
-    tracked = repo.git('ls-tree', '-r', '--name-only', 'HEAD').splitlines()
+    tracked = repo.git_paths('ls-tree', '-r', '--name-only', '-z', 'HEAD')
     def baseline(path):
         return git_text(repo, 'show', f'HEAD:{path}') if path in tracked else None
     config = validate_config(json.loads(baseline('.harness/config.json')))
@@ -361,9 +361,7 @@ def prepare(repo, api=gh_api):
     proposal = plan(config, identity, release, baseline)
     # Reject unrelated edits; permit repeat execution of this exact proposal.
     allowed = {**proposal['changes'], REQUEST: json_text(request)}
-    for path in git_text(repo, 'status', '--porcelain', '--untracked-files=all', '-z').split('\0'):
-        if not path:
-            continue
+    for path in repo.git_paths('status', '--porcelain', '--untracked-files=all', '-z'):
         if len(path) < 4 or path[:2] not in (' M', '??'):
             raise ValueError('Renovate preparation requires unstaged dependency-only edits')
         relative = path[3:]
@@ -374,7 +372,7 @@ def prepare(repo, api=gh_api):
 
 
 def validate_candidate(repo, base, api=gh_api):
-    paths = repo.git('ls-tree', '-r', '--name-only', base).splitlines()
+    paths = repo.git_paths('ls-tree', '-r', '--name-only', '-z', base)
     def baseline(path):
         return git_text(repo, 'show', f'{base}:{path}') if path in paths else None
     config = json.loads(baseline('.harness/config.json'))

@@ -4,7 +4,7 @@ import json
 import re
 import subprocess
 
-from .ci import WORKFLOW_PATH, controller_blobs, workflow_text
+from .ci import WORKFLOW_PATH, CHECKOUT, PYTHON, controller_blobs, workflow_text
 from .model import digest
 from .provider import ProviderError, file_bytes
 
@@ -42,6 +42,25 @@ def executed_baseline(config, prefix, run, api, logs):
     return refs[0]
 
 
+def actions_available(permissions):
+    if not isinstance(permissions, dict) or permissions.get('enabled') is not True:
+        return False
+    if permissions.get('allowed_actions') == 'all':
+        return True
+    if permissions.get('allowed_actions') != 'selected':
+        return False
+    selected = permissions.get('selected_actions')
+    if (not isinstance(selected, dict) or type(selected.get('github_owned_allowed')) is not bool
+            or type(selected.get('verified_allowed')) is not bool
+            or not isinstance(selected.get('patterns_allowed'), list)
+            or not all(isinstance(p, str) for p in selected['patterns_allowed'])):
+        return False
+    # Only the two public, GitHub-owned Actions in the fixed compiler need access.
+    # Avoid interpreting provider wildcard or Marketplace verification semantics.
+    return selected['github_owned_allowed'] or {f'actions/checkout@{CHECKOUT}',
+        f'actions/setup-python@{PYTHON}'} <= set(selected['patterns_allowed'])
+
+
 def trusted(config, raw):
     controller = config['verification'].get('controller')
     if not controller or not config['verification'].get('sandbox_image'):
@@ -53,7 +72,7 @@ def trusted(config, raw):
     if not any(w.get('path') == WORKFLOW_PATH and w.get('state') == 'active' for w in raw.get('workflows', {}).get('workflows', [])):
         return False
     permissions = raw.get('workflows', {}).get('permissions', {})
-    if permissions.get('enabled') is not True or permissions.get('allowed_actions') != 'all':
+    if not actions_available(permissions):
         return False
     policies = raw.get('actions_policies', [])
     def all_workflows(policy):
@@ -73,6 +92,10 @@ def observe_controller(config, raw, api, errors):
     ref = raw.get('branch', {}).get('commit', {}).get('sha')
     try:
         raw.setdefault('workflows', {})['permissions'] = api(f'{prefix}/actions/permissions')
+        if not isinstance(raw['workflows']['permissions'], dict):
+            raise ProviderError('Actions permissions observation malformed')
+        if raw['workflows']['permissions'].get('allowed_actions') == 'selected':
+            raw['workflows']['permissions']['selected_actions'] = api(f'{prefix}/actions/permissions/selected-actions')
         raw['canonical_config'] = json.loads(file_bytes(api, prefix, '.harness/config.json', ref))
         raw['controller_workflow'] = file_bytes(api, prefix, WORKFLOW_PATH, ref).decode('utf-8').replace('\r\n', '\n')
         source = f'repos/{controller["repository"]}'
@@ -96,10 +119,19 @@ def observe_controller(config, raw, api, errors):
         errors.append(f'trusted controller: {exc}')
 
 
+def proof_gap(reason, phase):
+    return {'valid': False, 'reason': reason, 'phase': phase,
+            'recovery': {'guide': 'docs/proof-recovery.md', 'automatic_activation': False,
+                         'steps': ['Resolve unavailable observations and retry Doctor',
+                                   'If evidence expired or substrate changed, collect fresh native deployment cases',
+                                   'Commit reviewed proof, rerun Doctor and explicitly activate']}}
+
+
 def observe_proof(config, observation, api, logs=job_log):
     if not observation.get('gate') or not observation.get('trusted_controller'):
-        return {'valid': False, 'reason': 'Native enforcement/provenance not currently established'}
+        return proof_gap('Native enforcement/provenance not currently established', 'substrate')
     prefix = f'repos/{config["repository"]}'
+    phase = 'manifest'
     try:
         proof = json.loads(file_bytes(api, prefix, '.harness/deployment-proof.json', observation['target_sha']))
         if proof.get('schema') != 1 or proof.get('policy') != observation['fingerprint'] or proof.get('repository') != config['repository']:
@@ -109,6 +141,7 @@ def observe_proof(config, observation, api, logs=job_log):
             raise ProviderError('Complete deployment proof cases required')
         result = {}
         for name in ('valid', 'invalid', 'source-spoof'):
+            phase = name
             case = cases[name]
             sha = case['head']
             if not re.fullmatch(r'[0-9a-f]{40}', sha):
@@ -156,17 +189,19 @@ def observe_proof(config, observation, api, logs=job_log):
                 if blocked.get('head_sha') != sha or blocked.get('event') not in ('push', 'pull_request') or blocked.get('conclusion') != 'startup_failure' or jobs.get('total_count') != 0:
                     raise ProviderError('Candidate-source workflow rejection before execution not observed')
                 result[name]['blocked_run'] = blocked['id']
+        phase = 'direct-update'
         suite = api(f'{prefix}/rulesets/rule-suites/{int(cases["direct-update"]["rule_suite_id"])}')
         if suite.get('result') != 'fail' or suite.get('ref') != f'refs/heads/{config["target"]}' or suite.get('after_sha') != cases['direct-update']['head']:
             raise ProviderError('Direct authoritative bypass rejection not observed')
         result['direct-update'] = {'rule_suite_id': suite['id'], 'result': 'fail'}
         work_result = None
         if config['profile'] == 'github-backlog-v1':
+            phase = 'work-cases'
             work_result = observe_work_proof(config, proof, api, logs)
         return {'valid': True, 'cases': result, 'proof_subject': digest(proof),
                 **({'work_cases': work_result} if work_result is not None else {})}
     except (ProviderError, ValueError, KeyError, TypeError) as exc:
-        return {'valid': False, 'reason': str(exc)}
+        return proof_gap(str(exc), phase)
 
 
 def observe_work_proof(config, proof, api, logs):
