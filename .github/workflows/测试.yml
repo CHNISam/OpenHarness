@@ -1,0 +1,11 @@
+name: Untrusted Unicode source probe
+on:
+  push:
+  pull_request:
+permissions:
+  statuses: write
+jobs:
+  untrusted:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo 'Native policy must block this source before any job executes'
