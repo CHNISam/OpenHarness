@@ -20,6 +20,8 @@ class BacklogControllerTests(unittest.TestCase):
 
     def api(self, path):
         self.calls.append(path)
+        if '/compare/' in path:
+            return {'base_commit': {'sha': 'b' * 40}, 'files': []}
         if '/pulls/' in path:
             return self.pull
         if '/branches/' in path:
@@ -64,8 +66,8 @@ class BacklogControllerTests(unittest.TestCase):
         context = current_context(self.config, {'pull_request': {'number': 7}}, self.api)
         calls = []
         approval = {'user': {'login': 'owner'}, 'body': 'OpenHarness-Control-Approval: ' + 'a' * 40 + ' ' + 'b' * 40}
-        self.assertTrue(control_authorized(self.config, context, lambda path: calls.append(path) or [approval]))
-        self.assertEqual(['repos/owner/repo/issues/7/comments?per_page=100'], calls)
+        self.assertFalse(control_authorized(self.config, context, lambda path: calls.append(path) or [approval]))
+        self.assertEqual([], calls)
         self.assertTrue(control_change(self.config, ['backlog/tasks/task-1 - Example.md']))
         self.assertTrue(control_change(self.config, ['backlog']))
         self.assertFalse(control_change(self.config, ['src/project.py']))

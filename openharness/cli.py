@@ -41,6 +41,10 @@ def parser():
     upgrade.add_argument('--enroll', action='store_true', help='Record the already pinned immutable release')
     integrate = commands.add_parser('integrate', help='Integrate exact bound candidate through native protected PR merge')
     integrate.add_argument('--pr', type=int, required=True)
+    impact = commands.add_parser('control-impact', help='Read exact control impact and review marker from the trusted base')
+    impact.add_argument('--pr', type=int, required=True)
+    impact.add_argument('--head', default='HEAD')
+    impact.add_argument('--base', required=True)
     handoff = commands.add_parser('handoff', help='Record continuity in the existing isolated workspace')
     handoff.add_argument('--reason', required=True)
     exceptional = commands.add_parser('break-glass', help='Record local exceptional recovery; grants no remote bypass')
@@ -92,6 +96,17 @@ def main(argv=None):
                 result = runtime.upgrade(args.release, args.enroll)
         elif args.command == 'integrate':
             result = runtime.integrate(args.pr)
+        elif args.command == 'control-impact':
+            from .control import impact_statement, local_changes, review_marker
+            from .model import validate_config
+            if args.pr <= 0:
+                raise ValueError('Positive PR required')
+            base, head = repo.revision(args.base), repo.revision(args.head)
+            trusted = validate_config(json.loads(repo.git('--no-replace-objects', 'show', f'{base}:.harness/config.json')))
+            context = {'pr': args.pr, 'base': base, 'head': head}
+            impact = impact_statement(trusted, context, local_changes(repo, base, head))
+            result = {'impact': impact, 'review_marker': review_marker(impact) if impact else None,
+                      'authorized': False, 'authority': 'read-only impact proposal'}
         elif args.command == 'handoff':
             result = runtime.handoff(args.reason)
         elif args.command == 'workspace':

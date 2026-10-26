@@ -199,16 +199,12 @@ def current_context(config, event, api=gh_api):
     return context
 
 
-def control_authorized(config, context, api=gh_api):
-    prefix = f'repos/{config["repository"]}'
-    surface = context['pr'] if config['profile'] == 'github-backlog-v1' else context['issue']
-    comments = api(f'{prefix}/issues/{surface}/comments?per_page=100')
-    if len(comments) >= 100:
-        raise ValueError('Approval observation incomplete')
-    expected = f'OpenHarness-Control-Approval: {context["head"]} {context["base"]}'
-    owner = config['repository'].split('/')[0]
-    return any(comment.get('user', {}).get('login', '').lower() == owner.lower()
-               and expected in comment.get('body', '').splitlines() for comment in comments)
+def control_authorized(config, context, api=gh_api, *, impact=None, mutating=False):
+    if impact is not None:
+        from .control import approved_review
+        return approved_review(config, context, impact, api, mutating=mutating)
+    # A historical comment/head/base token is not exact operation authorization.
+    return False
 
 
 def control_change(config, paths):
@@ -234,10 +230,12 @@ def check_candidate(config, baseline, root, event, api=gh_api):
     if tree != merged:
         raise ValueError('Strict candidate head must equal intended integration result tree')
     changed = repo.git_paths('diff', '--name-only', '--no-renames', '-z', context['base'], context['head'])
-    protected = control_change(config, changed)
-    authorized = control_authorized(config, context, api) if protected else False
+    from .control import impact_statement, local_changes
+    impact = impact_statement(config, context, local_changes(repo, context['base'], context['head']))
+    protected = impact is not None
+    authorized = control_authorized(config, context, api, impact=impact) if protected else False
     if protected and not authorized:
-        raise ValueError('Protected control change requires native owner approval bound to head and base')
+        raise ValueError('Protected control change requires exact native owner review of impact: ' + json.dumps(impact, sort_keys=True))
     if config['profile'] == 'github-backlog-v1':
         from .backlog import local_corpus
         resulting_work = local_corpus(repo, context['head'], config['work'])
@@ -292,7 +290,10 @@ def publish(config, event, result, head, base, tree, identity, api=gh_api, write
             matches = (merge.get('sha') == context['merge'] and merge.get('tree', {}).get('sha') == actual_tree
                        and [p.get('sha') for p in merge.get('parents', [])] == [context['base'], context['head']])
         if matches and current_context(config, event, api) == context:
-            state = 'success'
+            from .control import remote_changes, impact_statement
+            impact = impact_statement(config, context, remote_changes(config, context, api))
+            if not impact or control_authorized(config, context, api, impact=impact):
+                state = 'success'
     else:
         # Failed verification may have no outputs or legal work context. It can
         # publish a rejection, never success, to one observed PR snapshot.
