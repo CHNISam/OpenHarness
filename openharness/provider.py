@@ -42,6 +42,13 @@ def gh_write(path, method, payload):
 
 
 def gh_api(path):
+    if isinstance(path, dict):
+        if set(path) != {'query'} or not isinstance(path['query'], str) or not path['query'].lstrip().startswith('query '):
+            raise ProviderError('Only explicit read-only GraphQL queries are supported')
+        response = gh_write('graphql', 'POST', path)
+        if response.get('errors'):
+            raise ProviderError('Native GraphQL observation failed')
+        return response
     try:
         result = subprocess.run(['gh', 'api', path], capture_output=True, text=True, encoding='utf-8', timeout=45)
     except (OSError, subprocess.TimeoutExpired) as exc:

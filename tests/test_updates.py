@@ -285,17 +285,29 @@ class UpgradeTests(unittest.TestCase):
         git(self.root, 'commit', '-m', 'upgrade proposal')
         head, base = self.repo.revision('HEAD'), self.repo.revision('main')
         pull = {'number': 8, 'state': 'open', 'draft': False, 'body': 'Work-Item: #7',
+                'user': {'login': 'executor-bot'},
                 'head': {'sha': head, 'ref': 'codex/7-openharness-0-2-2'},
                 'base': {'sha': base, 'ref': 'main'}}
+        from openharness.control import impact_statement, local_changes, review_marker
+        baseline_config = Repository(baseline_path).config()
+        impact = impact_statement(baseline_config, {'pr': 8, 'head': head, 'base': base},
+                                  local_changes(self.repo, base, head))
         def provider(path):
+            if isinstance(path, dict):
+                return {'data': {'viewer': {'login': 'github-actions[bot]'}, 'repository': {
+                    'pullRequest': {'headRefOid': head, 'baseRefOid': base,
+                        'author': pull['user'], 'reviews': {'pageInfo': {'hasNextPage': False},
+                            'nodes': [{'id': 'review-1', 'state': 'APPROVED', 'body': review_marker(impact),
+                                'submittedAt': '2026-10-26T00:00:00Z', 'lastEditedAt': None,
+                                'isMinimized': False, 'viewerDidAuthor': False,
+                                'author': {'login': 'owner', '__typename': 'User'},
+                                'commit': {'oid': head}}]}}}}}
             if path == 'repos/owner/repo/pulls/8':
                 return pull
             if path == 'repos/owner/repo/issues/7':
                 return {'number': 7, 'state': 'open'}
             if path == 'repos/owner/repo/branches/main':
                 return {'commit': {'sha': base}}
-            if path == 'repos/owner/repo/issues/7/comments?per_page=100':
-                return [{'user': {'login': 'owner'}, 'body': f'OpenHarness-Control-Approval: {head} {base}'}]
             return self.api(path)
         from subprocess import CompletedProcess
         original_run = updates.subprocess.run

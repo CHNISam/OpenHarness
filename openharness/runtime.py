@@ -536,6 +536,8 @@ class Runtime:
                 raise ValueError('Integration candidate base is stale')
             self.repo.git('merge-base', '--is-ancestor', base, context['head'])
             expected = self.repo.git('rev-parse', 'HEAD^{tree}')
+            from .control import require_approval
+            require_approval(self.repo, config, context, self.provider.api)
             result = gh_write(f'{prefix}/pulls/{pr}/merge', 'PUT', {'sha': context['head'], 'merge_method': 'merge'})
             if not result.get('merged'):
                 raise ValueError('Native integration rejected: ' + str(result.get('message')))

@@ -202,8 +202,11 @@ head/base/tree/work authority. An all-workflow native Actions event policy permi
 baseline `pull_request_target`, blocking candidate push/PR/dispatch source spoofing.
 
 PRs require exactly one `Work-Item: #N` line and their Issue-bound Change branch.
-Changes to `.github/`, `.harness/` or `AGENTS.md` require a repository-owner Issue
-comment with `OpenHarness-Control-Approval: HEAD_SHA BASE_SHA`. Both old and proposed
+Changes to `.github/`, `.harness/` or `AGENTS.md` require an independent native
+repository-owner PR review bound to repository, PR, head, base and exact control impact.
+Generate the read-only statement with `control-impact`; historical head/base-only
+comments no longer authorize control changes. See [control approval](docs/control-approval.md).
+Both old and proposed
 acceptance configurations run when config changes. Control changes use the same gate.
 
 `integrate --pr N` merges the exact clean bound candidate through native enforcement

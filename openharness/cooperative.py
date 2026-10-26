@@ -29,6 +29,9 @@ def integrate(runtime, pr):
     candidate = runtime._verification_candidate(head, base)
     if candidate['tree'] != repo.git('rev-parse', 'HEAD^{tree}'):
         raise ValueError('PR head differs from the intended integration result')
+    from .control import require_approval
+    control_context = {'pr': int(pr), 'head': head, 'base': base}
+    require_approval(repo, config, control_context, provider.api)
     workflow = config['verification'].get('workflow')
     if not workflow:
         raise ValueError('Configure the existing CI workflow before integration')
@@ -41,6 +44,7 @@ def integrate(runtime, pr):
     subject = lambda row: (row.get('state'), row.get('draft'), row.get('body'), row.get('head'), row.get('base'), row.get('user', {}).get('login'))
     if subject(current) != subject(pull) or provider.target(config) != base:
         raise ValueError('PR or canonical base changed before integration')
+    require_approval(repo, config, control_context, provider.api)
     command = config.get('integration_command')
     command_error = None
     if command:

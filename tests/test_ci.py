@@ -63,12 +63,12 @@ class ControllerTests(unittest.TestCase):
         self.config['verification']['controller']['repository'] = 'external/tool'
         self.assertFalse(control_change(self.config, ['tests/test_product.py']))
 
-    def test_control_approval_is_exact_native_owner_head_and_base(self):
+    def test_legacy_comment_without_operation_cannot_authorize_controls(self):
         context = {'head': 'a' * 40, 'base': 'b' * 40, 'issue': 3}
         comment = {'user': {'login': 'other'}, 'body': 'OpenHarness-Control-Approval: ' + 'a' * 40 + ' ' + 'b' * 40}
         self.assertFalse(control_authorized(self.config, context, lambda _: [comment]))
         comment['user']['login'] = 'owner'
-        self.assertTrue(control_authorized(self.config, context, lambda _: [comment]))
+        self.assertFalse(control_authorized(self.config, context, lambda _: [comment]))
         context['base'] = 'c' * 40
         self.assertFalse(control_authorized(self.config, context, lambda _: [comment]))
 
@@ -103,6 +103,8 @@ class ControllerTests(unittest.TestCase):
     def publisher_api(self, pulls, merge=None):
         snapshots = iter(pulls)
         def api(path):
+            if '/compare/' in path:
+                return {'base_commit': {'sha': 'b' * 40}, 'files': []}
             if '/pulls/' in path:
                 return copy.deepcopy(next(snapshots))
             if '/branches/' in path:
@@ -222,6 +224,8 @@ class ControllerTests(unittest.TestCase):
     def test_publisher_rejects_old_head_and_accepts_only_matching_identity(self):
         event = {'pull_request': {'number': 7}}
         def api(path):
+            if '/compare/' in path:
+                return {'base_commit': {'sha': 'b' * 40}, 'files': []}
             if '/pulls/' in path:
                 return self.pull
             if '/issues/' in path:
