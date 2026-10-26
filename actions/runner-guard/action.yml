@@ -1,0 +1,41 @@
+name: OpenHarness command resource guard
+description: Opt-in host lock, disk preflight and bounded command execution; no installation
+inputs:
+  command-json:
+    description: JSON argv array; scripts require an explicit interpreter, no implicit shell
+    required: true
+  lock-path:
+    description: Absolute operator-owned local lock file shared by all participating repositories
+    required: true
+  disk-path:
+    description: Existing path on the volume used by the command
+    required: true
+  min-free-bytes:
+    description: Required free bytes before the command starts
+    required: true
+  wait-seconds:
+    description: Maximum time waiting for the host lock
+    required: true
+  timeout-seconds:
+    description: Maximum command duration before process-tree termination
+    required: true
+  python:
+    description: Installed Python 3.11+ executable; never downloaded by this action
+    default: python
+runs:
+  using: composite
+  steps:
+    - shell: powershell
+      env:
+        OPENHARNESS_COMMAND_JSON: ${{ inputs.command-json }}
+        OPENHARNESS_LOCK: ${{ inputs.lock-path }}
+        OPENHARNESS_DISK: ${{ inputs.disk-path }}
+        OPENHARNESS_FREE: ${{ inputs.min-free-bytes }}
+        OPENHARNESS_WAIT: ${{ inputs.wait-seconds }}
+        OPENHARNESS_TIMEOUT: ${{ inputs.timeout-seconds }}
+        OPENHARNESS_PYTHON: ${{ inputs.python }}
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $guard = Join-Path $env:GITHUB_ACTION_PATH '../../openharness/runner_guard.py'
+        & $env:OPENHARNESS_PYTHON $guard --lock $env:OPENHARNESS_LOCK --disk $env:OPENHARNESS_DISK --min-free-bytes $env:OPENHARNESS_FREE --wait-seconds $env:OPENHARNESS_WAIT --timeout-seconds $env:OPENHARNESS_TIMEOUT
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
